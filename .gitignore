@@ -1,0 +1,6 @@
+.snakemake
+slurm*
+data
+samples
+experiments
+logs
