@@ -2,16 +2,45 @@ import sys
 import glob
 
 
-SAMPLES_DIR="samples"
-EXPERIMENTS_DIR="experiments"
+class sample:
+    def __init__(self, name, kit, fc, parent_exp, barcode=None):
+        self.name = name
+        self.kit = kit
+        self.fc = fc
+        self.parent_exp = parent_exp
+        self.barcode = barcode
+    
+    def is_barcoded(self):
+        if self.barcode is None:
+            return False
+        return True
 
 
-samples = [
-    'hsa_dRNA_Huh7_mock_1',
-    'hsa_dRNA_Huh7_EBOV_6h_1',
-    'hsa_dRNA_Huh7_EBOV_24h_1',
-    # 'hsa_PCRcDNA_Huh7_EBOV_0_6_24h_1',
-]
+class experiment:
+    def __init__(self, name, kit, fc, is_barcoded):
+        self.name = name
+        self.kit = kit
+        self.fc = fc
+        self.is_barcoded = is_barcoded
+
+
+SAMPLES_DIR = 'samples'
+EXPERIMENTS_DIR = 'experiments'
+ASSEMBLY = 'hg38'
+
+
+samples = {s.name : s for s in [
+    sample('hsa_dRNA_Huh7_mock_1', 'RNA-OO2', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_mock_1'),
+    sample('hsa_dRNA_Huh7_EBOV_6h_1', 'RNA-OO2', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_EBOV_6h_1'),
+    sample('hsa_dRNA_Huh7_EBOV_24h_1', 'RNA-OO2', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_EBOV_24h_1'),
+    sample('hsa_PCRcDNA_Huh7_EBOV_mock_1', 'SQK-PCB111-24', 'FLO-PRO002', '20220922_hsa_PCRcDNA_Huh7_EBOV_0_6_24h_1', '01'),
+    sample('hsa_PCRcDNA_Huh7_EBOV_6h_1', 'SQK-PCB111-24', 'FLO-PRO002', '20220922_hsa_PCRcDNA_Huh7_EBOV_0_6_24h_1', '02'),
+    sample('hsa_PCRcDRNA_Huh7_EBOV_24h_1', 'SQK-PCB111-24', 'FLO-PRO002', '20220922_hsa_PCRcDNA_Huh7_EBOV_0_6_24h_1', '03'),
+]}
+
+
+experiments = {
+    s.parent_exp : experiment(s.parent_exp, s.kit, s.fc, s.is_barcoded()) for s in samples.values()}
 
 
 # Define the rsync paths from which the data can be downloaded.
@@ -22,42 +51,39 @@ RSYNC_PATH='niairplggcgu.irp.nia.nih.gov:/store/seq/ont/experiments/'
 include: "rules/get_data.smk"
 
 
+# Define rules that require minimal resources and can run on the same node where
+# the actual snakemake is running
+localrules: run_all
+
+
 # Rule run_all collects all outputs to force execution of the whole pipeline.
 rule run_all:
     input:
-        expand(str(SAMPLES_DIR) + "/{s}/guppy/sequencing_summary.txt", s = samples),
+        expand(SAMPLES_DIR + "/{s}/guppy/sequencing_summary.txt", s = samples.keys()),
+        expand(EXPERIMENTS_DIR + "/{e}/guppy/clean_guppy_logs_done", e = experiments.keys()),
 
 
-# softlink_fast5 creates symbolic link pointing to the directory with the raw
-# fast5 files
-rule softlink_fast5:
-    input:
-        origin=lambda wildcards: glob.glob(
-                EXPERIMENTS_DIR + "/"+('[0-9]'*8)+"_{s}/origin.txt".format(s=wildcards.s)),
-    output:
-        SAMPLES_DIR + "/{s}/fast5linked"
-    params:
-        fast5dir=lambda wildcards: glob.glob(
-                EXPERIMENTS_DIR + "/" + ('[0-9]'*8) + "_{s}/".format(s=wildcards.s))[0] + "runs"
-    shell:
-        """
-        ln -s {params.fast5dir} {SAMPLES_DIR}/{wildcards.s}/fast5
-        touch {output}
-        """
+# guppy_barcode_options returns the additional options that are used in the
+# guppy_basecaller to enable detection of barcodes.
+def guppy_barcode_options(experiment):
+    if experiment.is_barcoded:
+        return '--detect_barcodes --barcode_kits ' + experiment.kit
+    
+    return ''
 
 
-# Rule guppy_basecall runs the guppy basecaller. The input for guppy is a
-# directory.
+# Rule guppy_basecall runs the guppy basecaller.
 rule guppy_basecall:
     input:
-        str(SAMPLES_DIR) + "/{s}/fast5linked"
+        EXPERIMENTS_DIR + "/{e}/origin.txt"
     output:
-        str(SAMPLES_DIR) + "/{s}/guppy/sequencing_summary.txt"
+        EXPERIMENTS_DIR + "/{e}/guppy/sequencing_summary.txt"
     log:
-        str(SAMPLES_DIR) + "/{s}/log/guppy.log"
+        EXPERIMENTS_DIR + "/{e}/log/guppy.log"
     params:
-        fc="FLO-PRO002",
-        kit="SQK-RNA002",
+        fc = lambda wilds: experiments[wilds.e].fc,
+        kit = lambda wilds: experiments[wilds.e].kit,
+        barcode_opts = lambda wilds: guppy_barcode_options(experiments[wilds.e]),
     threads:
         8
     resources:
@@ -75,354 +101,171 @@ rule guppy_basecall:
             --records_per_fastq 0 \
             --u_substitution off \
             --trim_strategy none \
-            --input_path {SAMPLES_DIR}/{wildcards.s}/fast5/ \
-            --save_path {SAMPLES_DIR}/{wildcards.s}/guppy/ \
+            --input_path {EXPERIMENTS_DIR}/{wildcards.e}/fast5/ \
+            --save_path {EXPERIMENTS_DIR}/{wildcards.e}/guppy/ \
             --recursive \
             --gpu_runners_per_device 1 \
             --num_callers {threads} \
             --chunks_per_runner 512 \
             --compress_fastq \
             --max_queued_reads 20000 \
+            {params.barcode_opts} \
             &> {log}
         """
 
 
-# class sample:
-#     def __init__(self, sid, name, barcode):
-#         self.id = sid
-#         self.barcode = barcode
-#         self.name = name
-
-#     def sanitized_name(self):
-#         name = self.name
-#         name = name.replace("*", "star")
-#         name = name.replace(" ", "")
-#         name = name.replace("_-_", "_NA_")
-
-#         name = "_".join(name.split("_")[1:])
-#         return name
-
-# class metadata:
-#     def __init__(self, filename, sheet):
-#         self.file = filename
-#         self.sheet = sheet
-#         self.name_to_exp = {}
-
-#         self.process_xlsx()
-
-#     def get_sample_by_name(self, name):
-#         return self.name_to_exp[name]
-
-#     def process_xlsx(self):
-#         wb = openpyxl.load_workbook(filename=self.file)
-
-#         # Get the correct sheet from the excel
-#         if self.sheet not in wb.sheetnames:
-#             exit() # TODO return an exception
-#         ws = wb[self.sheet]
-
-#         in_region = False
-#         for row in ws.iter_rows(values_only=True):
-#             if row[0] == "Sample ID***":
-#                 in_region = True
-#                 next
-
-#             if in_region:
-#                 sample_id = row[0]
-#                 sample_name = row[7]
-#                 sample_barcode = row[9]
-
-#                 # Skip samples that haven't been sequenced yet
-#                 if sample_barcode == None:
-#                     next
-
-#                 e = sample(sample_id, sample_name, sample_barcode)
-#                 self.name_to_exp[e.sanitized_name()] = e
+# Rule merge_fastqs merges output fastqs from the basecalling step into a
+# single file.
+rule merge_fastqs:
+    input:
+        EXPERIMENTS_DIR + "/{expt}/guppy/sequencing_summary.txt",
+    output:
+        fastq = EXPERIMENTS_DIR + "/{expt}/guppy/reads.fastq.gz",
+    threads: 2
+    shell:
+        """
+        find \
+            {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/pass/ \
+            {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/fail/ \
+            -name "fastq_runid_*.fastq.gz" \
+            -print0 \
+        | while read -d $'\\0' FILE; do \
+            cat $FILE >> {output.fastq};\
+            done
+        """
 
 
-# EXPDIR = '/data/Maragkakislab/darsa/workspace/projects/indi/experiments'
-# SAMPLEDIR='/data/Maragkakislab/darsa/workspace/projects/indi/samples'
-# SAMPLEMULTIPLEXDIR='/data/Maragkakislab/darsa/workspace/projects/indi/samples_multiplexed'
-
-# ASSEMBLY='hg38'
-# resdir_analysis="/data/Maragkakislab/darsa/workspace/projects/indi/analysis"
-# # bam_counts="/data/Maragkakislab/darsa/workspace/projects/indi/analysis/counts/results"
-
-
-# # Logic that creates a data structure from the csv file
-# xlsx = "./metadata_iNDI/20220715_iNDI_FTD_Pilot_NISC.xlsx"
-# xlsx_md = metadata(filename=xlsx, sheet="Submission Form")
-
-
-
-# ################################################################################
-# # Localrules:
-# ################################################################################
-# localrules: run_all, softlink_fast5, make_barcode_dir_if_missing,
-#     merge_logs, clean_guppy_fastqs, merge_fastqs,
-#     clean_guppy_logs, get_fastq_from_demultiplex, symlink_seqdata_for_igv,
-#     count_aligned_reads, quartile_norm_gene, quartile_norm_transcripts,
-#     get_raw_counts,
-
-# ################################################################################
-# # Rule run_all collects all outputs to force execution of the whole pipeline.
-# ################################################################################
-# rule run_all:
-#     input:
-#         expand(SAMPLEDIR + "/{sample}/fastq/reads.sanitize.pychopper.fastq.gz", sample = samples),
-#         expand(SAMPLEDIR + "/{sample}/align/reads.sanitize.pychopper.toGenome.sorted.bam", sample = samples),
-#         expand(SAMPLEDIR + "/{sample}/align/reads.sanitize.pychopper.toGenome.sorted.bam.bai", sample = samples),
-#         expand(SAMPLEDIR + "/{sample}/align/reads.sanitize.pychopper.toTranscriptome.sorted.bam", sample = samples),
-#         expand(SAMPLEDIR + "/{sample}/align/reads.sanitize.pychopper.toTranscriptome.sorted.bam.bai", sample = samples),
-#         # expand(SAMPLEDIR + "/{sample}/qc/reads.sanitize.pychopper_fastqc.html", sample = samples),
-#         expand(SAMPLEDIR + "/{sample}/qc/reads.sanitize.pychopper.fastq_lendistro.fig", sample = samples),
-#         # expand("analysis/counts/fastq" + "/{sample}/counts_{fastqfile}.txt", sample = samples, fastqfile = fastqfiles),
-#         expand(resdir_analysis + "/counts/results/{sample}/fastq/counts_reads.sanitize.fastq.gz.txt", sample = samples),
-#         expand(resdir_analysis + "/counts/results/{sample}/fastq/counts_reads.sanitize.pychopper.fastq.txt", sample = samples),
-#         expand(resdir_analysis + "/counts/results/{sample}/fastq/counts_rescued.fq.txt", sample = samples),
-#         expand(resdir_analysis + "/counts/results/{sample}/fastq/counts_unclassified.fq.txt", sample = samples),
-#         expand(resdir_analysis + "/counts/results/{sample}/align/flagstats_reads.sanitize.pychopper.toGenome.sorted.bam.txt", sample = samples),
-#         expand(resdir_analysis + "/counts/results/{sample}/align/flagstats_reads.sanitize.pychopper.toTranscriptome.sorted.bam.txt", sample = samples),
-#         expand(resdir_analysis + "/counts/results/{sample}/align/read.counts.txt", sample = samples),
-#         expand(resdir_analysis + "/counts/results/{sample}/align/tid_qnorm.txt", sample = samples),
-#         expand(resdir_analysis + "/counts/results/{sample}/align/gid_qnorm.txt", sample = samples),
-#         expand(resdir_analysis + "/counts/results/{sample}/align/tid_raw_counts.txt", sample = samples),
-#         expand(resdir_analysis + "/counts/results/{sample}/align/gid_raw_counts.txt", sample = samples),
-#         resdir_analysis + "/PCA/results/raw_data/all_gid_raw_counts.txt",
-#         resdir_analysis + "/PCA/results/raw_data/all_tid_raw_counts.txt",
-#         resdir_analysis + "/PCA/results/raw_data/all_gid_colwise_raw_counts.txt",
-#         resdir_analysis + "/PCA/results/raw_data/all_tid_colwise_raw_counts.txt",
+# Rule merge_fastqs merges output fastqs per barcode from the basecalling step
+# into a single file.
+rule merge_fastqs_per_barcode:
+    input:
+        EXPERIMENTS_DIR + "/{expt}/guppy/sequencing_summary.txt",
+    output:
+        fastq = EXPERIMENTS_DIR + "/{expt}/guppy/{b}/reads.fastq.gz",
+    threads: 2
+    shell:
+        """
+        find \
+            {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/pass/{wildcards.b}/ \
+            {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/fail/{wildcards.b}/ \
+            -name "fastq_runid_*.fastq.gz" \
+            -print0 \
+        | while read -d $'\\0' FILE; do \
+            cat $FILE >> {output.fastq};\
+            done
+        """
 
 
-# ################################################################################
-# # softlink_fast5 creates symbolic link pointing to the directory with the raw
-# # fast5 files
-# ################################################################################
-# rule softlink_fast5:
-#     input:
-#         origin = EXPDIR + "/{expt}/origin.txt"
-#     output:
-#         SAMPLEMULTIPLEXDIR + "/{expt}/fast5linked"
-#     params:
-#         fast5dir = EXPDIR + "/{expt}/runs"
-#     threads: 1
-#     shell:
-#         """
-#         # ln -s {params.fast5dir} expt/{wildcards.expt}/fast5
-#         ln -s {params.fast5dir} {SAMPLEMULTIPLEXDIR}/{wildcards.expt}/fast5
-#         touch {output}
-#         """
-
-# ################################################################################
-# # Rule guppy_basecall runs the guppy basecaller. The input for guppy is a
-# # directory. However, snakemake does not work well with directories (cannot
-# # infer their creation date) therefore we use the file fast5linked as a
-# # sentinel file for the rule input.
-# ################################################################################
-# rule guppy_basecall:
-#     input:
-#         SAMPLEMULTIPLEXDIR + "/{expt}/fast5linked"
-#     output:
-#         SAMPLEMULTIPLEXDIR + "/{expt}/guppy/sequencing_summary.txt"
-#     log:
-#         SAMPLEMULTIPLEXDIR + "/{expt}/log/guppy.log"
-#     params:
-#         fc="FLO-PRO002",
-#         kit="SQK-PCB111-24",
-#     threads:
-#         8
-#     resources:
-#         gpu=2,
-#         gpu_model="v100x",
-#         mem_mb=64*1024,
-#         runtime=24*10*60
-#     shell:
-#         """
-#         module load guppy/6.1.2
-#         guppy_basecaller \
-#             -x cuda:all \
-#             --flowcell {params.fc} \
-#             --kit {params.kit} \
-#             --records_per_fastq 0 \
-#             --u_substitution off \
-#             --trim_strategy none \
-#             --input_path {SAMPLEMULTIPLEXDIR}/{wildcards.expt}/fast5/ \
-#             --save_path {SAMPLEMULTIPLEXDIR}/{wildcards.expt}/guppy/ \
-#             --recursive \
-#             --gpu_runners_per_device 1 \
-#             --num_callers {threads} \
-#             --chunks_per_runner 512 \
-#             --compress_fastq \
-#             --max_queued_reads 20000 \
-#             --detect_barcodes \
-#             --barcode_kits "{params.kit}" \
-#             &> {log}
-#         """
+# Rule merge_logs merges all logs from the basecalling step.
+rule merge_logs:
+    input:
+        summ = EXPERIMENTS_DIR + "/{expt}/guppy/sequencing_summary.txt",
+    output:
+        glog = EXPERIMENTS_DIR + "/{expt}/guppy/guppy_basecaller.log.gz"
+    threads: 5
+    shell:
+        """
+        find {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/ \
+            -name "guppy_basecaller_log-*.log" \
+            -print0 \
+        | while read -d $'\\0' FILE; do \
+            cat $FILE | pigz -c >> {output.glog};\
+            done
+        """
 
 
-# # --resume \
-# #  option to resume the runs if interrupted  --resume
-# # NOTE: DO NOT use option "--trim_barcodes" in guppy guppy_basecaller as
-# # it will remove adaptors, needed in next step of read orientation etc of cDNAs.
-
-# ################################################################################
-# # Rule make_barcode_dir_if_missing creates a placeholder directory for a
-# # barcode that is missing. This is required because if the directory does not
-# # exist, the `find` commands in the other rules fail.
-# ################################################################################
-# rule make_barcode_dir_if_missing:
-#     input:
-#         summ = SAMPLEMULTIPLEXDIR + "/{expt}/guppy/sequencing_summary.txt",
-#     output:
-#         sentinel = SAMPLEMULTIPLEXDIR + "/{expt}/guppy/{passfail}/{barcode}/sentinel",
-#     threads: 1
-#     shell:
-#         """
-#         mkdir -p {SAMPLEMULTIPLEXDIR}/{wildcards.expt}/guppy/{wildcards.passfail}/{wildcards.barcode}/
-#         touch {output}
-#         """
-
-# ################################################################################
-# # Rule merge_fastqs merges output fastqs per barcode from the basecalling step
-# # into a single file.
-# ################################################################################
-# rule merge_fastqs:
-#     input:
-#         SAMPLEMULTIPLEXDIR + "/{expt}/guppy/sequencing_summary.txt",
-#         SAMPLEMULTIPLEXDIR + "/{expt}/guppy/pass/{barcode}/sentinel",
-#         SAMPLEMULTIPLEXDIR + "/{expt}/guppy/fail/{barcode}/sentinel",
-#     output:
-#         fastq = SAMPLEMULTIPLEXDIR + "/{expt}/guppy/{barcode}/reads.fastq.gz",
-#     threads: 5
-#     shell:
-#         """
-#         # Creates an empty file in case find finds no fastqs
-#         gzip < /dev/null > {output.fastq}
-
-#         find \
-#             {SAMPLEMULTIPLEXDIR}/{wildcards.expt}/guppy/pass/{wildcards.barcode}/ \
-#             {SAMPLEMULTIPLEXDIR}/{wildcards.expt}/guppy/fail/{wildcards.barcode}/ \
-#             -name "fastq_runid_*.fastq.gz" \
-#             -print0 \
-#         | while read -d $'\\0' FILE; do \
-#             cat $FILE >> {output.fastq};\
-#             done
-#         """
-
-# ################################################################################
-# # Rule merge_logs merges all logs from the basecalling step.
-# ################################################################################
-# rule merge_logs:
-#     input:
-#         summ = SAMPLEMULTIPLEXDIR + "/{expt}/guppy/sequencing_summary.txt",
-#     output:
-#         glog = SAMPLEMULTIPLEXDIR + "/{expt}/guppy/guppy_basecaller.log.gz"
-#     threads: 5
-#     shell:
-#         """
-#         find {SAMPLEMULTIPLEXDIR}/{wildcards.expt}/guppy/ \
-#             -name "guppy_basecaller_log-*.log" \
-#             -print0 \
-#         | while read -d $'\\0' FILE; do \
-#             cat $FILE | pigz -c >> {output.glog};\
-#             done
-#         """
-
-# ################################################################################
-# # Rule clean_guppy_logs cleans all guppy output logs.
-# ################################################################################
-# rule clean_guppy_logs:
-#     input:
-#         merged_log = "{SAMPLEMULTIPLEXDIR}/{expt}/guppy/guppy_basecaller.log.gz",
-#     output:
-#         "{SAMPLEMULTIPLEXDIR}/{expt}/guppy/clean_guppy_logs_done"
-#     threads: 5
-#     shell:
-#         """
-#         find {SAMPLEMULTIPLEXDIR}/{wildcards.expt}/guppy/ \
-#             -name "guppy_basecaller_log-*.log" \
-#             -delete
-#         touch {output}
-#         """
-
-# ################################################################################
-# # Rule clean_guppy_fastqs cleans all guppy output fastqs per barcode.
-# ################################################################################
-# rule clean_guppy_fastqs:
-#     input:
-#         merged_fastq = SAMPLEMULTIPLEXDIR + "/{expt}/guppy/{barcode}/reads.fastq.gz",
-#         sentinel_pass = SAMPLEMULTIPLEXDIR + "/{expt}/guppy/pass/{barcode}/sentinel",
-#         sentinel_fail = SAMPLEMULTIPLEXDIR + "/{expt}/guppy/fail/{barcode}/sentinel",
-#     output:
-#         "{SAMPLEMULTIPLEXDIR}/{expt}/guppy/{barcode}/clean_guppy_fastqs_done"
-#     threads: 10
-#     shell:
-#         """
-#         find \
-#             {SAMPLEMULTIPLEXDIR}/{wildcards.expt}/guppy/pass/{wildcards.barcode}/ \
-#             {SAMPLEMULTIPLEXDIR}/{wildcards.expt}/guppy/fail/{wildcards.barcode}/ \
-#             -name "fastq_runid_*.fastq.gz" \
-#             -delete
-#         touch {output}
-#         """
-
-# ################################################################################
-# def input_func(wilds):
-#     s = xlsx_md.get_sample_by_name(wilds.sample)
-#     id = s.id
-#     barcode = '{:02d}'.format(s.barcode)
-
-#     dirs = glob.glob(
-#             EXPDIR+"/"+('[0-9]'*8)+"_iNDI_*{id}*/".format(id=id))
-
-#     dir = ""
-#     if len(dirs) > 1:
-#         clean_dirs = []
-#         for d in dirs:
-#             if re.search("_iNDI_\w*" + id + "[_/]", d):
-#                 clean_dirs.append(d)
-
-#         dirs = clean_dirs
-#         if len(dirs) > 1:
-#             print("Error: More than one experiment folders found for", id)
-#             sys.exit() # TODO: sys.exit() is not working to stop the snakemake execution
-#     dir = dirs[0]
-
-#     # Get the section corresponding to multiplexed name from the path
-#     multiplex_name = dir.split("/")[-2]
-
-#     return SAMPLEMULTIPLEXDIR + "/" + multiplex_name + "/guppy/barcode" + barcode + "/reads.fastq.gz"
-#     # return "/data/Maragkakislab/darsa/workspace/projects/indi/experiments/" + multiplex_name + "/guppy/barcode" + barcode + "/reads.fastq.gz"
+# Rule clean_guppy_logs cleans all guppy output logs.
+rule clean_guppy_logs:
+    input:
+        merged_log = EXPERIMENTS_DIR + "/{expt}/guppy/guppy_basecaller.log.gz",
+    output:
+        EXPERIMENTS_DIR + "/{expt}/guppy/clean_guppy_logs_done"
+    shell:
+        """
+        find {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/ \
+            -name "guppy_basecaller_log-*.log" \
+            -delete
+        touch {output}
+        """
 
 
-# ################################################################################
-# # Demultiplexing and extracting of the samples
-# ################################################################################
-# rule get_fastq_from_demultiplex:
-#     input: input_func
-#     output: SAMPLEDIR + "/{sample}/fastq/reads.fastq.gz"
-#     threads: 1
-#     shell: "ln -s {input} {output}"
+# Rule clean_guppy_fastqs cleans all guppy output fastqs after they have been
+# merged in one file.
+rule clean_guppy_fastqs:
+    input:
+        merged_fastq = EXPERIMENTS_DIR + "/{expt}/guppy/reads.fastq.gz",
+    output:
+        EXPERIMENTS_DIR + "/{expt}/guppy/clean_guppy_fastqs_done"
+    shell:
+        """
+        find \
+            {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/pass/ \
+            {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/fail/ \
+            -name "fastq_runid_*.fastq.gz" \
+            -delete
+        touch {output}
+        """
 
-# ################################################################################
-# # Remove extraneous information from the fastq headers to save space in
-# # subsequent steps.
-# ################################################################################
-# rule sanitize_headers:
-#     input:
-#         SAMPLEDIR + "/{sample}/fastq/reads.fastq.gz"
 
-#     output:
-#         SAMPLEDIR + "/{sample}/fastq/reads.sanitize.fastq.gz"
-#     threads: 12
-#     resources: mem_mb=8*1024, runtime=2*60
-#     shell:
-#         """
-#         zcat {input} \
-#             | dev/fastq_sanitize_header.py --fastq - \
-#             | pigz \
-#             > {output}
-#         """
+# Rule clean_guppy_fastqs cleans all guppy output fastqs per barcode after they
+# have been merged in one file.
+rule clean_guppy_fastqs_per_barcode:
+    input:
+        merged_fastq = EXPERIMENTS_DIR + "/{expt}/guppy/{b}/reads.fastq.gz",
+    output:
+        EXPERIMENTS_DIR + "/{expt}/guppy/{b}/clean_guppy_fastqs_done"
+    shell:
+        """
+        find \
+            {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/pass/{wildcards.b}/ \
+            {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/fail/{wildcards.b}/ \
+            -name "fastq_runid_*.fastq.gz" \
+            -delete
+        touch {output}
+        """
+
+# input_for_get_fastq_from_basecalling identifies and returns the directory path
+# that contains the basecalled data for a sample. For barcoded samples the path
+# contains two extra levels corresponding to the barcode. 
+def input_for_get_fastq_from_basecalling(wilds):
+    s = samples[wilds.s]
+    
+    if s.is_barcoded():
+        return os.path.join(
+            EXPERIMENTS_DIR, s.parent_exp, "guppy", "barcode", s.barcode, "reads.fastq.gz")
+    
+    return os.path.join(
+        EXPERIMENTS_DIR, s.parent_exp, "guppy", "reads.fastq.gz")
+
+
+# Rule get_fastq_from_basecalling creates a symbolic link to the basecalled 
+# fastq file.
+rule get_fastq_from_basecalling:
+    input: input_for_get_fastq_from_basecalling
+    output: temp(SAMPLES_DIR + "/{s}/fastq/reads.fastq.gz")
+    threads: 1
+    shell: "ln -s {input} {output}"
+
+
+# Rule sanitize_headers removes extraneous information from the fastq headers
+# to save space in subsequent steps.
+rule sanitize_headers:
+    input:
+        SAMPLES_DIR + "/{s}/fastq/reads.fastq.gz"
+
+    output:
+        SAMPLES_DIR + "/{s}/fastq/reads.sanitize.fastq.gz"
+    threads: 12
+    resources:
+        mem_mb=2*1024,
+        runtime=6*60
+    shell:
+        """
+        zcat {input} \
+            | dev/fastq_sanitize_header.py --fastq - \
+            | pigz \
+            > {output}
+        """
 
 
 # ################################################################################
@@ -430,12 +273,12 @@ rule guppy_basecall:
 # ################################################################################
 # rule pychopper_trim_orient_reads:
 #     input:
-#         SAMPLEDIR + "/{sample}/fastq/reads.sanitize.fastq.gz"
+#         SAMPLES_DIR + "/{sample}/fastq/reads.sanitize.fastq.gz"
 #     output:
-#         report = SAMPLEDIR + "/{sample}/fastq/report.pdf",
-#         rescued = SAMPLEDIR + "/{sample}/fastq/rescued.fq",
-#         unclassified = SAMPLEDIR + "/{sample}/fastq/unclassified.fq",
-#         trimmed = SAMPLEDIR + "/{sample}/fastq/reads.sanitize.pychopper.fastq",
+#         report = SAMPLES_DIR + "/{sample}/fastq/report.pdf",
+#         rescued = SAMPLES_DIR + "/{sample}/fastq/rescued.fq",
+#         unclassified = SAMPLES_DIR + "/{sample}/fastq/unclassified.fq",
+#         trimmed = SAMPLES_DIR + "/{sample}/fastq/reads.sanitize.pychopper.fastq",
 #     threads: 20
 #     resources: mem_mb=50*1024, runtime=24*60
 #     shell:
@@ -456,13 +299,13 @@ rule guppy_basecall:
 # ################################################################################
 # rule gzip_pychopper_output:
 #     input:
-#         rescued = SAMPLEDIR + "/{sample}/fastq/rescued.fq",
-#         unclassified = SAMPLEDIR + "/{sample}/fastq/unclassified.fq",
-#         trimmed = SAMPLEDIR + "/{sample}/fastq/reads.sanitize.pychopper.fastq",
+#         rescued = SAMPLES_DIR + "/{sample}/fastq/rescued.fq",
+#         unclassified = SAMPLES_DIR + "/{sample}/fastq/unclassified.fq",
+#         trimmed = SAMPLES_DIR + "/{sample}/fastq/reads.sanitize.pychopper.fastq",
 #     output:
-#         rescued = SAMPLEDIR + "/{sample}/fastq/rescued.fq.gz",
-#         unclassified = SAMPLEDIR + "/{sample}/fastq/unclassified.fq.gz",
-#         trimmed = SAMPLEDIR + "/{sample}/fastq/reads.sanitize.pychopper.fastq.gz",
+#         rescued = SAMPLES_DIR + "/{sample}/fastq/rescued.fq.gz",
+#         unclassified = SAMPLES_DIR + "/{sample}/fastq/unclassified.fq.gz",
+#         trimmed = SAMPLES_DIR + "/{sample}/fastq/reads.sanitize.pychopper.fastq.gz",
 #     threads: 20
 #     resources: mem_mb=5*1024, runtime=24*60
 #     shell:
@@ -477,10 +320,10 @@ rule guppy_basecall:
 # ################################################################################
 # rule align_reads_to_genome:
 #     input:
-#         SAMPLEDIR + "/{sample}/fastq/{fastq_step}.fastq.gz"
+#         SAMPLES_DIR + "/{sample}/fastq/{fastq_step}.fastq.gz"
 #     output:
-#         SAMPLEDIR + "/{sample}/align/{fastq_step}.toGenome.sorted.bam"
-#         # temporary(SAMPLEDIR + "/{sample}/align/{fastq_step}.toGenome.sorted.bam")
+#         SAMPLES_DIR + "/{sample}/align/{fastq_step}.toGenome.sorted.bam"
+#         # temporary(SAMPLES_DIR + "/{sample}/align/{fastq_step}.toGenome.sorted.bam")
 #     # conda:
 #     #     "envs/minimap2.yml"
 #     threads: 50
@@ -512,10 +355,10 @@ rule guppy_basecall:
 # ################################################################################
 # rule align_reads_to_transcriptome:
 #     input:
-#         SAMPLEDIR + "/{sample}/fastq/{fastq_step}.fastq.gz"
+#         SAMPLES_DIR + "/{sample}/fastq/{fastq_step}.fastq.gz"
 #     output:
-#         SAMPLEDIR + "/{sample}/align/{fastq_step}.toTranscriptome.sorted.bam"
-#         # temporary(SAMPLEDIR + "/{sample}/align/{fastq_step}.toTranscriptome.sorted.bam")
+#         SAMPLES_DIR + "/{sample}/align/{fastq_step}.toTranscriptome.sorted.bam"
+#         # temporary(SAMPLES_DIR + "/{sample}/align/{fastq_step}.toTranscriptome.sorted.bam")
 
 #     threads: 50
 #     resources: mem_mb=100*1024, runtime=24*5*60
@@ -578,11 +421,11 @@ rule guppy_basecall:
 # rule fastqc_fastq:
 #     input:
 #         # "{filepath}/reads.sanitize.pychopper.fastq",
-#         SAMPLEDIR + "/{sample}/fastq/reads.sanitize.pychopper.fastq.gz",
+#         SAMPLES_DIR + "/{sample}/fastq/reads.sanitize.pychopper.fastq.gz",
 #     output:
 #         # "{filepath}/qc/reads.sanitize.pychopper.fastq_fastqc.html",
-#         SAMPLEDIR + "/{sample}/qc/reads.sanitize.pychopper_fastqc.html",
-#         outdir = SAMPLEDIR + "/{sample}/qc/",
+#         SAMPLES_DIR + "/{sample}/qc/reads.sanitize.pychopper_fastqc.html",
+#         outdir = SAMPLES_DIR + "/{sample}/qc/",
 #     threads: 20
 #     resources: mem_mb=150*1024, runtime=24*60
 #     shell:
@@ -603,10 +446,10 @@ rule guppy_basecall:
 # ################################################################################
 # rule fastq_len_distro:
 #     input:
-#         SAMPLEDIR + "/{sample}/fastq/reads.sanitize.pychopper.fastq.gz",
+#         SAMPLES_DIR + "/{sample}/fastq/reads.sanitize.pychopper.fastq.gz",
 #     output:
-#         tab = SAMPLEDIR + "/{sample}/qc/reads.sanitize.pychopper.fastq_lendistro.tab",
-#         fig = SAMPLEDIR + "/{sample}/qc/reads.sanitize.pychopper.fastq_lendistro.pdf",
+#         tab = SAMPLES_DIR + "/{sample}/qc/reads.sanitize.pychopper.fastq_lendistro.tab",
+#         fig = SAMPLES_DIR + "/{sample}/qc/reads.sanitize.pychopper.fastq_lendistro.pdf",
 #     threads: 40
 #     resources: mem_mb=100*1024, runtime=24*60
 #     shell:
@@ -630,11 +473,11 @@ rule guppy_basecall:
 
 # rule count_fastq_reads:
 #     input:
-#         fq_in_sanit = SAMPLEDIR + "/{sample}/fastq/reads.sanitize.fastq.gz",
-#         fq_in_pychop = SAMPLEDIR + "/{sample}/fastq/reads.sanitize.pychopper.fastq.gz",
-#         fq_in_rescued = SAMPLEDIR + "/{sample}/fastq/rescued.fq.gz",
-#         fq_in_unused = SAMPLEDIR + "/{sample}/fastq/unclassified.fq.gz",
-#         # SAMPLEDIR + "/{sample}/fastq/{fastqfile}",
+#         fq_in_sanit = SAMPLES_DIR + "/{sample}/fastq/reads.sanitize.fastq.gz",
+#         fq_in_pychop = SAMPLES_DIR + "/{sample}/fastq/reads.sanitize.pychopper.fastq.gz",
+#         fq_in_rescued = SAMPLES_DIR + "/{sample}/fastq/rescued.fq.gz",
+#         fq_in_unused = SAMPLES_DIR + "/{sample}/fastq/unclassified.fq.gz",
+#         # SAMPLES_DIR + "/{sample}/fastq/{fastqfile}",
 
 #     output:
 #         fq_out_sanit = resdir_analysis + "/counts/results/{sample}/fastq/counts_reads.sanitize.fastq.gz.txt",
@@ -657,7 +500,7 @@ rule guppy_basecall:
 # ################################################################################
 # rule bamfile_flagstats:
 #     input:
-#         SAMPLEDIR + "/{sample}/align/{filetype}.bam",
+#         SAMPLES_DIR + "/{sample}/align/{filetype}.bam",
 #     output:
 #         resdir_analysis + "/counts/results/{sample}/align/flagstats_{filetype}.bam.txt",
 #     threads: 4
@@ -674,7 +517,7 @@ rule guppy_basecall:
 # ################################################################################
 # rule count_aligned_reads:
 #     input:
-#         SAMPLEDIR + "/{sample}/align/reads.sanitize.pychopper.toTranscriptome.sorted.bam",
+#         SAMPLES_DIR + "/{sample}/align/reads.sanitize.pychopper.toTranscriptome.sorted.bam",
 #     output:
 #         resdir_analysis + "/counts/results/{sample}/align/read.counts.txt"
 #     shell:
@@ -855,3 +698,21 @@ rule guppy_basecall:
 # # 	results/metadata.txt \
 # # 	tab \
 # # 	results/geneid/deseq2_normalised_
+
+
+# # softlink_fast5 creates symbolic link pointing to the directory with the raw
+# # fast5 files
+# rule softlink_fast5:
+#     input:
+#         origin=lambda wildcards: glob.glob(
+#                 EXPERIMENTS_DIR + "/"+('[0-9]'*8)+"_{s}/origin.txt".format(s=wildcards.s)),
+#     output:
+#         SAMPLES_DIR + "/{s}/fast5linked"
+#     params:
+#         fast5dir=lambda wildcards: "../../" + glob.glob(
+#                 EXPERIMENTS_DIR + "/" + ('[0-9]'*8) + "_{s}/".format(s=wildcards.s))[0] + "runs"
+#     shell:
+#         """
+#         ln -s {params.fast5dir} {SAMPLES_DIR}/{wildcards.s}/fast5
+#         touch {output}
+#         """
