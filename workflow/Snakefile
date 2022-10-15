@@ -9,7 +9,7 @@ class sample:
         self.fc = fc
         self.parent_exp = parent_exp
         self.barcode = barcode
-    
+
     def is_barcoded(self):
         if self.barcode is None:
             return False
@@ -26,13 +26,16 @@ class experiment:
 
 SAMPLES_DIR = 'samples'
 EXPERIMENTS_DIR = 'experiments'
+IGV_DIR = "igv"
 ASSEMBLY = 'hg38'
+SCRIPTS_DIR = 'workflow/scripts'
+RSYNC_PATH = 'niairplggcgu.irp.nia.nih.gov:/store/seq/ont/experiments/' # Path to download data from.
 
 
 samples = {s.name : s for s in [
-    sample('hsa_dRNA_Huh7_mock_1', 'RNA-OO2', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_mock_1'),
-    sample('hsa_dRNA_Huh7_EBOV_6h_1', 'RNA-OO2', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_EBOV_6h_1'),
-    sample('hsa_dRNA_Huh7_EBOV_24h_1', 'RNA-OO2', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_EBOV_24h_1'),
+    sample('hsa_dRNA_Huh7_mock_1', 'SQK-RNA002', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_mock_1'),
+    sample('hsa_dRNA_Huh7_EBOV_6h_1', 'SQK-RNA002', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_EBOV_6h_1'),
+    sample('hsa_dRNA_Huh7_EBOV_24h_1', 'SQK-RNA002', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_EBOV_24h_1'),
     sample('hsa_PCRcDNA_Huh7_EBOV_mock_1', 'SQK-PCB111-24', 'FLO-PRO002', '20220922_hsa_PCRcDNA_Huh7_EBOV_0_6_24h_1', '01'),
     sample('hsa_PCRcDNA_Huh7_EBOV_6h_1', 'SQK-PCB111-24', 'FLO-PRO002', '20220922_hsa_PCRcDNA_Huh7_EBOV_0_6_24h_1', '02'),
     sample('hsa_PCRcDRNA_Huh7_EBOV_24h_1', 'SQK-PCB111-24', 'FLO-PRO002', '20220922_hsa_PCRcDNA_Huh7_EBOV_0_6_24h_1', '03'),
@@ -43,24 +46,32 @@ experiments = {
     s.parent_exp : experiment(s.parent_exp, s.kit, s.fc, s.is_barcoded()) for s in samples.values()}
 
 
-# Define the rsync paths from which the data can be downloaded.
-RSYNC_PATH='niairplggcgu.irp.nia.nih.gov:/store/seq/ont/experiments/'
-
-
 ##### include rules #####
 include: "rules/get_data.smk"
 
 
 # Define rules that require minimal resources and can run on the same node where
 # the actual snakemake is running
-localrules: run_all
+localrules: run_all, merge_fastqs, merge_fastqs_per_barcode, merge_logs,
+            clean_guppy_logs, get_fastq_from_basecalling, symlink_alignments_for_igv
 
 
 # Rule run_all collects all outputs to force execution of the whole pipeline.
 rule run_all:
     input:
-        expand(SAMPLES_DIR + "/{s}/guppy/sequencing_summary.txt", s = samples.keys()),
-        expand(EXPERIMENTS_DIR + "/{e}/guppy/clean_guppy_logs_done", e = experiments.keys()),
+        expand(
+        		SAMPLES_DIR + "/{s}/align/reads.{target}.sorted.{sufx}",
+        		s = samples.keys(),
+        		target = ['toGenome', 'toTranscriptome'],
+        		sufx = ['bam', 'bam.bai']),
+        expand(
+        		IGV_DIR + "/align/{s}-reads.{target}.sorted.{sufx}",
+        		s = samples.keys(),
+        		target = ['toGenome', 'toTranscriptome'],
+        		sufx = ['bam', 'bam.bai']),
+        expand(
+        		EXPERIMENTS_DIR + "/{e}/guppy/clean_guppy_logs_done",
+        		e = experiments.keys()),
 
 
 # guppy_barcode_options returns the additional options that are used in the
@@ -68,7 +79,7 @@ rule run_all:
 def guppy_barcode_options(experiment):
     if experiment.is_barcoded:
         return '--detect_barcodes --barcode_kits ' + experiment.kit
-    
+
     return ''
 
 
@@ -101,7 +112,7 @@ rule guppy_basecall:
             --records_per_fastq 0 \
             --u_substitution off \
             --trim_strategy none \
-            --input_path {EXPERIMENTS_DIR}/{wildcards.e}/fast5/ \
+            --input_path {EXPERIMENTS_DIR}/{wildcards.e}/runs/ \
             --save_path {EXPERIMENTS_DIR}/{wildcards.e}/guppy/ \
             --recursive \
             --gpu_runners_per_device 1 \
@@ -121,7 +132,6 @@ rule merge_fastqs:
         EXPERIMENTS_DIR + "/{expt}/guppy/sequencing_summary.txt",
     output:
         fastq = EXPERIMENTS_DIR + "/{expt}/guppy/reads.fastq.gz",
-    threads: 2
     shell:
         """
         find \
@@ -142,12 +152,11 @@ rule merge_fastqs_per_barcode:
         EXPERIMENTS_DIR + "/{expt}/guppy/sequencing_summary.txt",
     output:
         fastq = EXPERIMENTS_DIR + "/{expt}/guppy/{b}/reads.fastq.gz",
-    threads: 2
     shell:
         """
         find \
-            {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/pass/{wildcards.b}/ \
-            {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/fail/{wildcards.b}/ \
+            {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/pass/barcode{wildcards.b}/ \
+            {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/fail/barcode{wildcards.b}/ \
             -name "fastq_runid_*.fastq.gz" \
             -print0 \
         | while read -d $'\\0' FILE; do \
@@ -162,7 +171,6 @@ rule merge_logs:
         summ = EXPERIMENTS_DIR + "/{expt}/guppy/sequencing_summary.txt",
     output:
         glog = EXPERIMENTS_DIR + "/{expt}/guppy/guppy_basecaller.log.gz"
-    threads: 5
     shell:
         """
         find {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/ \
@@ -189,62 +197,30 @@ rule clean_guppy_logs:
         """
 
 
-# Rule clean_guppy_fastqs cleans all guppy output fastqs after they have been
-# merged in one file.
-rule clean_guppy_fastqs:
-    input:
-        merged_fastq = EXPERIMENTS_DIR + "/{expt}/guppy/reads.fastq.gz",
-    output:
-        EXPERIMENTS_DIR + "/{expt}/guppy/clean_guppy_fastqs_done"
-    shell:
-        """
-        find \
-            {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/pass/ \
-            {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/fail/ \
-            -name "fastq_runid_*.fastq.gz" \
-            -delete
-        touch {output}
-        """
-
-
-# Rule clean_guppy_fastqs cleans all guppy output fastqs per barcode after they
-# have been merged in one file.
-rule clean_guppy_fastqs_per_barcode:
-    input:
-        merged_fastq = EXPERIMENTS_DIR + "/{expt}/guppy/{b}/reads.fastq.gz",
-    output:
-        EXPERIMENTS_DIR + "/{expt}/guppy/{b}/clean_guppy_fastqs_done"
-    shell:
-        """
-        find \
-            {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/pass/{wildcards.b}/ \
-            {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/fail/{wildcards.b}/ \
-            -name "fastq_runid_*.fastq.gz" \
-            -delete
-        touch {output}
-        """
-
 # input_for_get_fastq_from_basecalling identifies and returns the directory path
 # that contains the basecalled data for a sample. For barcoded samples the path
-# contains two extra levels corresponding to the barcode. 
+# contains two extra levels corresponding to the barcode.
 def input_for_get_fastq_from_basecalling(wilds):
     s = samples[wilds.s]
-    
+
     if s.is_barcoded():
         return os.path.join(
             EXPERIMENTS_DIR, s.parent_exp, "guppy", "barcode", s.barcode, "reads.fastq.gz")
-    
+
     return os.path.join(
         EXPERIMENTS_DIR, s.parent_exp, "guppy", "reads.fastq.gz")
 
 
-# Rule get_fastq_from_basecalling creates a symbolic link to the basecalled 
+# Rule get_fastq_from_basecalling creates a symbolic link to the basecalled
 # fastq file.
 rule get_fastq_from_basecalling:
     input: input_for_get_fastq_from_basecalling
-    output: temp(SAMPLES_DIR + "/{s}/fastq/reads.fastq.gz")
+    output: SAMPLES_DIR + "/{s}/fastq/reads.fastq.gz"
     threads: 1
-    shell: "ln -s {input} {output}"
+    shell:
+        """
+        mv {input} {output}
+        """
 
 
 # Rule sanitize_headers removes extraneous information from the fastq headers
@@ -262,157 +238,165 @@ rule sanitize_headers:
     shell:
         """
         zcat {input} \
-            | dev/fastq_sanitize_header.py --fastq - \
+            | {SCRIPTS_DIR}/fastq_sanitize_header.py --fastq - \
             | pigz \
             > {output}
         """
 
 
-# ################################################################################
-# # cDNA reads Trimming and Orientation correction - using  pychopper
-# ################################################################################
-# rule pychopper_trim_orient_reads:
-#     input:
-#         SAMPLES_DIR + "/{sample}/fastq/reads.sanitize.fastq.gz"
-#     output:
-#         report = SAMPLES_DIR + "/{sample}/fastq/report.pdf",
-#         rescued = SAMPLES_DIR + "/{sample}/fastq/rescued.fq",
-#         unclassified = SAMPLES_DIR + "/{sample}/fastq/unclassified.fq",
-#         trimmed = SAMPLES_DIR + "/{sample}/fastq/reads.sanitize.pychopper.fastq",
-#     threads: 20
-#     resources: mem_mb=50*1024, runtime=24*60
-#     shell:
-#         """
-#         module load pychopper/2.7.1
-#         pychopper \
-#             -r {output.report} \
-#             -m edlib \
-#             -u {output.rescued} \
-#             -t {threads} \
-#             -w {output.unclassified} \
-#              {input} \
-#              {output.trimmed}
-#         """
-
-# ################################################################################
-# # cDNA reads Trimming and Orientation correction - using  pychopper
-# ################################################################################
-# rule gzip_pychopper_output:
-#     input:
-#         rescued = SAMPLES_DIR + "/{sample}/fastq/rescued.fq",
-#         unclassified = SAMPLES_DIR + "/{sample}/fastq/unclassified.fq",
-#         trimmed = SAMPLES_DIR + "/{sample}/fastq/reads.sanitize.pychopper.fastq",
-#     output:
-#         rescued = SAMPLES_DIR + "/{sample}/fastq/rescued.fq.gz",
-#         unclassified = SAMPLES_DIR + "/{sample}/fastq/unclassified.fq.gz",
-#         trimmed = SAMPLES_DIR + "/{sample}/fastq/reads.sanitize.pychopper.fastq.gz",
-#     threads: 20
-#     resources: mem_mb=5*1024, runtime=24*60
-#     shell:
-#         """
-#         pigz -p {threads} {input.trimmed} {input.rescued} {input.unclassified} \
-#         > {output.trimmed} {output.rescued} {output.unclassified}
-#         """
+# pychopper_trim_orient_reads uses pychopper to identify and trim the ONT
+# barcodes. It also orients the reads 5' to 3'. This is only used for the cDNA
+# protocol.
+rule pychopper_trim_orient_reads:
+    input:
+        SAMPLES_DIR + "/{s}/fastq/{prefix}.fastq.gz"
+    output:
+        report = SAMPLES_DIR + "/{s}/fastq/{prefix}.pychop.report.pdf",
+        rescued = SAMPLES_DIR + "/{s}/fastq/{prefix}.pychop.rescued.fastq.gz",
+        unclass = SAMPLES_DIR + "/{s}/fastq/{prefix}.pychop.unclass.fastq.gz",
+        trimmed = SAMPLES_DIR + "/{s}/fastq/{prefix}.pychop.trimmed.fastq.gz",
+    threads: 20
+    resources:
+        mem_mb=50*1024,
+        runtime=24*60
+    shell:
+        """
+        module load pychopper/2.7.1
+        pychopper \
+            -r {output.report} \
+            -m edlib \
+            -t {threads} \
+            -u {output.rescued} \
+            -w {output.unclass} \
+             {input} \
+             {output.trimmed}
+        pigz -p {threads} \
+                {output.trimmed} \
+                {output.rescued} \
+                {output.unclass}
+        """
 
 
-# ################################################################################
-# # align_reads_to_genome aligns the input reads to the genome.
-# ################################################################################
-# rule align_reads_to_genome:
-#     input:
-#         SAMPLES_DIR + "/{sample}/fastq/{fastq_step}.fastq.gz"
-#     output:
-#         SAMPLES_DIR + "/{sample}/align/{fastq_step}.toGenome.sorted.bam"
-#         # temporary(SAMPLES_DIR + "/{sample}/align/{fastq_step}.toGenome.sorted.bam")
-#     # conda:
-#     #     "envs/minimap2.yml"
-#     threads: 50
-#     resources: mem_mb=100*1024, runtime=24*5*60
-#     shell:
-#         """
-#         module load samtools/1.10
-#         minimap2 \
-#                 -a \
-#                 -x splice \
-#                 -k 12 \
-#                 -u b \
-#                 --MD \
-#                 --sam-hit-only \
-#                 --junc-bed data/{ASSEMBLY}/junctions.bed  \
-#                 -t {threads} \
-#                 --secondary=no \
-#                 data/{ASSEMBLY}/genome/genome.fa \
-#                 {input} \
-#                     | grep -v "SA:Z:" \
-#                     | samtools view -b -F 256 - \
-#                     | samtools sort --threads {threads} \
-#                     > {output}
-#         """
+# pychopper_trim_orient_reads uses pychopper to identify and trim the ONT
+# barcodes. It also orients the reads 5' to 3'. This is only used for the cDNA
+# protocol.
+rule pychopper_merge_trimmed_rescued:
+    input:
+        rescued = SAMPLES_DIR + "/{s}/fastq/{prefix}.pychop.rescued.fastq.gz",
+        trimmed = SAMPLES_DIR + "/{s}/fastq/{prefix}.pychop.trimmed.fastq.gz",
+    output:
+        SAMPLES_DIR + "/{s}/fastq/{prefix}.pychopped.fastq.gz",
+    threads: 2
+    resources:
+        mem_mb=2*1024,
+        runtime=24*60
+    shell:
+        """
+        cat {input.trimmed} {input.rescued} > {output}
+        """
 
 
-# ################################################################################
-# # align_reads_to_transcriptome: aligns the input reads to the transcriptome.
-# ################################################################################
-# rule align_reads_to_transcriptome:
-#     input:
-#         SAMPLES_DIR + "/{sample}/fastq/{fastq_step}.fastq.gz"
-#     output:
-#         SAMPLES_DIR + "/{sample}/align/{fastq_step}.toTranscriptome.sorted.bam"
-#         # temporary(SAMPLES_DIR + "/{sample}/align/{fastq_step}.toTranscriptome.sorted.bam")
+# input_for_alignment rules identifies and returns the input fastq file for
+# the alignment step. For barcoded samples the file will pass through
+# pychopper to orient and remove adapters.
+def input_for_alignment_rules(sample, fastq_prefix):
+    s = sample
 
-#     threads: 50
-#     resources: mem_mb=100*1024, runtime=24*5*60
-#     shell:
-#         """
-#         module load samtools/1.10
-#         minimap2 \
-#                 -a \
-#                 -x map-ont \
-#                 -k 12 \
-#                 -u f \
-#                 -t {threads} \
-#                 --secondary=no \
-#                 data/{ASSEMBLY}/transcripts.fa \
-#                 {input} \
-#                     | grep -v "SA:Z:" \
-#                     | samtools view -b -F 256 - \
-#                     | samtools sort --threads {threads} \
-#                     > {output}
-#         """
+    if s.is_barcoded():
+        return os.path.join(
+            SAMPLES_DIR, s.name, "fastq", fastq_prefix + ".pychopped.fastq.gz")
+
+    return os.path.join(
+        SAMPLES_DIR, s.name, "fastq", fastq_prefix + ".fastq.gz")
 
 
-# ################################################################################
-# # symlink_seqdata_for_igv creates symbolic links for bam files to be used with
-# # IGV. The links contain the sample name in the filename to simplify loading
-# # in IGV.
-# ################################################################################
-# rule symlink_seqdata_for_igv:
-#     input:
-#         "/data/Maragkakislab/darsa/workspace/projects/indi/samples/" + "{sample}/align/{fastq_step}.{toTarget}.sorted.bam",
-#     output:
-#         "igv/seqdata/{sample}_{fastq_step}.{toTarget}.bam",
-#     threads: 5
-#     shell:
-#         """
-#         ln -s ../../{input} {output}
-#         """
+# align_reads_to_genome aligns the input reads to the genome.
+rule align_reads_to_genome:
+    input:
+        lambda ws: input_for_alignment_rules(samples[ws.sample], ws.prefix)
+    output:
+        SAMPLES_DIR + "/{sample}/align/{prefix}.toGenome.sorted.bam"
+    # conda:
+    #     "envs/minimap2.yml"
+    threads: 50
+    resources: mem_mb=100*1024, runtime=24*5*60
+    shell:
+        """
+        module load samtools/1.15.1 minimap2/2.24
+        minimap2 \
+                -a \
+                -x splice \
+                -k 12 \
+                -u b \
+                --MD \
+                --sam-hit-only \
+                --junc-bed data/{ASSEMBLY}/junctions.bed  \
+                -t {threads} \
+                --secondary=no \
+                data/{ASSEMBLY}/genome/genome.fa \
+                {input} \
+                    | grep -v "SA:Z:" \
+                    | samtools view -b -F 256 - \
+                    | samtools sort --threads {threads} \
+                    > {output}
+        """
 
 
-# ################################################################################
-# # index_bam indexes a bam file
-# ################################################################################
-# rule index_bam:
-#     input:
-#         "{filepath}.bam",
-#     output:
-#         "{filepath}.bam.bai",
-#     threads: 40
-#     resources: mem_mb=150*1024, runtime=60*5
-#     shell:
-#         """
-#         module load samtools/1.10
-#         samtools index -@ {threads} {input}
-#         """
+# align_reads_to_transcriptome: aligns the input reads to the transcriptome.
+rule align_reads_to_transcriptome:
+    input:
+        lambda ws: input_for_alignment_rules(samples[ws.sample], ws.prefix)
+    output:
+        SAMPLES_DIR + "/{sample}/align/{prefix}.toTranscriptome.sorted.bam"
+    threads: 50
+    resources: mem_mb=100*1024, runtime=24*5*60
+    shell:
+        """
+        module load samtools/1.15.1 minimap2/2.24
+        minimap2 \
+                -a \
+                -x map-ont \
+                -k 12 \
+                -u f \
+                -t {threads} \
+                --secondary=no \
+                data/{ASSEMBLY}/transcripts.fa \
+                {input} \
+                    | grep -v "SA:Z:" \
+                    | samtools view -b -F 256 - \
+                    | samtools sort --threads {threads} \
+                    > {output}
+        """
+
+
+# index_bam indexes a bam file
+rule index_bam:
+    input:
+        SAMPLES_DIR + "/{sample}/align/{filename}.bam",
+    output:
+        SAMPLES_DIR + "/{sample}/align/{filename}.bam.bai",
+    threads: 40
+    resources: mem_mb=5*1024, runtime=5*60
+    shell:
+        """
+        module load samtools/1.15.1
+        samtools index -@ {threads} {input}
+        """
+
+
+# symlink_alignments_for_igv creates symbolic links for bam files to be used
+# with IGV. The links contain the sample name in the filename to simplify
+# loading in IGV.
+rule symlink_alignments_for_igv:
+    input:
+        SAMPLES_DIR + "/{sample}/align/{filename}",
+    output:
+        "igv/align/{sample}-{filename}",
+    threads: 1
+    shell:
+        """
+        ln -s ../../{input} {output}
+        """
 
 
 # ################################################################################
