@@ -151,7 +151,7 @@ rule merge_fastqs_per_barcode:
     input:
         EXPERIMENTS_DIR + "/{expt}/guppy/sequencing_summary.txt",
     output:
-        fastq = EXPERIMENTS_DIR + "/{expt}/guppy/{b}/reads.fastq.gz",
+        fastq = EXPERIMENTS_DIR + "/{expt}/guppy/barcode/{b}/reads.fastq.gz",
     shell:
         """
         find \
