@@ -2,4 +2,6 @@
 
 module load snakemake || exit 1
 
-snakemake -pr  --keep-going --latency-wait 120 -s workflow/Snakefile --profile workflow/snakemake_profile
+source myconda
+mamba activate base
+snakemake -pr --keep-going --retries 3 --latency-wait 120 --use-conda --use-envmodules -s workflow/Snakefile --profile workflow/snakemake_profile
