@@ -15,11 +15,11 @@ Optional resources: disk_mb, gpu, gpu_model, runtime, ntasks, nodes
 
 import argparse
 import sys
+import os
 #from pathlib import Path
 from math import ceil
 from subprocess import run
 from snakemake.utils import read_job_properties
-import os
 
 
 def assign_partition(threads, mem_mb, time_min, gres, ntasks, nodes):
@@ -109,7 +109,13 @@ def make_sbatch_cmd(props):
 
     if "gpu" in resources:
         if "gpu_model" in resources:
-            gres.append(f'gpu:{resources["gpu_model"]}:{resources["gpu"]}')
+            model = resources["gpu_model"]
+            # allow the definition of a constraint instead of a single gpu model.
+            if "|" in model:
+                gres.append(f'gpu:{resources["gpu"]}')
+                sbatch_cmd.append(f"--constraint='{model}'")
+            else:
+                gres.append(f'gpu:{resources["gpu_model"]}:{resources["gpu"]}')
         else:
             gres.append(f'gpu:{resources["gpu"]}')
 
