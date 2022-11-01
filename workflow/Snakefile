@@ -15,6 +15,11 @@ class sample:
             return False
         return True
 
+    def is_direct_rna(self):
+        if self.kit == 'SQK-RNA002':
+            return True
+        return False
+
 
 class experiment:
     def __init__(self, name, kit, fc, is_barcoded):
@@ -76,6 +81,10 @@ rule run_all:
         expand(
                 ANALYSIS_DIR + "/counts/results/{s}/reads.toTranscriptome.counts.txt",
                 s = samples.keys()),
+        # Nanopolish polya for dRNA-Seq
+        expand(
+                ANALYSIS_DIR + "/polya/results/{s}/polya.tab",
+                s = [s.name for s in samples.values() if s.is_direct_rna()]),
         # Files for IGV
         expand(
                 IGV_DIR + "/align/{s}-reads.{target}.sorted.{sufx}",
@@ -536,6 +545,74 @@ rule fastqc_fastq:
                 -o {params.outdir} \
                 -t {params.dummy_threads} \
                 {input}
+        """
+
+
+rule nanopolish_index:
+    input:
+        exp_dir = lambda ws: EXPERIMENTS_DIR + '/'+ samples[ws.s].parent_exp + '/origin.txt',
+        seq_sum = lambda ws: EXPERIMENTS_DIR + '/'+ samples[ws.s].parent_exp + '/guppy/sequencing_summary.txt',
+        fastq = SAMPLES_DIR + "/{s}/fastq/reads.fastq.gz",
+    output:
+        SAMPLES_DIR + "/{s}/fastq/reads.fastq.gz.index.fai"
+    params:
+        fast5_dir = lambda wilds, input: os.path.dirname(input.exp_dir),
+    threads: 1
+    resources:
+        mem_mb=5*1024,
+        runtime=1*24*60
+    envmodules:
+        "nanopolish/0.14.0"
+    shell:
+        """
+        nanopolish index \
+                --directory {params.fast5_dir}/runs/ \
+                --sequencing-summary {input.seq_sum} \
+                {input.fastq}
+        """
+
+
+rule nanopolish_polya:
+    input:
+        fastq = SAMPLES_DIR + "/{s}/fastq/reads.fastq.gz",
+        bam = SAMPLES_DIR + "/{s}/align/reads.toTranscriptome.sorted.bam",
+        index = SAMPLES_DIR + "/{s}/fastq/reads.fastq.gz.index.fai",
+        genome = DATA_DIR + '/' + ASSEMBLY + "/transcripts.fa",
+    output:
+        ANALYSIS_DIR + "/polya/results/{s}/polya.tab"
+    threads: 20
+    resources:
+        runtime=2*24*60
+    conda:
+        "envs/bam.yml"
+    envmodules:
+        "nanopolish/0.14.0",
+        "hdf5/1.10.4",
+    shell:
+        """
+        nanopolish polya \
+            --reads {input.fastq} \
+            --bam {input.bam} \
+            --genome {input.genome} \
+            --threads {threads} \
+            | table-paste-col.py \
+                --table - \
+                --col-name sample \
+                --col-val {wildcards.s} \
+            > {output}
+        """
+
+
+rule nanopolish_filter_passes:
+    input:
+        ANALYSIS_DIR + "/polya/results/{s}/polya.tab"
+    output:
+        ANALYSIS_DIR + "/polya/results/{s}/polya.filtered.tab"
+    shell:
+        """
+        cat {input} \
+            | grep -P '(qc_tag|PASS)' \
+            > {output}
         """
 
 
