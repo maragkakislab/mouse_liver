@@ -34,18 +34,20 @@ EXPERIMENTS_DIR = 'experiments'
 DATA_DIR = 'data'
 ANALYSIS_DIR = 'analysis'
 IGV_DIR = "igv"
-ASSEMBLY = 'hg38'
+ASSEMBLY = 'mm10'
 SCRIPTS_DIR = 'workflow/scripts'
 RSYNC_PATH = 'niairplggcgu.irp.nia.nih.gov:/store/seq/ont/experiments/' # Path to download data from.
 
 
 samples = {s.name : s for s in [
-    sample('hsa_dRNA_Huh7_mock_1', 'SQK-RNA002', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_mock_1'),
-    sample('hsa_dRNA_Huh7_EBOV_6h_1', 'SQK-RNA002', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_EBOV_6h_1'),
-    sample('hsa_dRNA_Huh7_EBOV_24h_1', 'SQK-RNA002', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_EBOV_24h_1'),
-    sample('hsa_PCRcDNA_Huh7_EBOV_mock_1', 'SQK-PCB111-24', 'FLO-PRO002', '20220922_hsa_PCRcDNA_Huh7_EBOV_0_6_24h_1', '01'),
-    sample('hsa_PCRcDNA_Huh7_EBOV_6h_1', 'SQK-PCB111-24', 'FLO-PRO002', '20220922_hsa_PCRcDNA_Huh7_EBOV_0_6_24h_1', '02'),
-    sample('hsa_PCRcDNA_Huh7_EBOV_24h_1', 'SQK-PCB111-24', 'FLO-PRO002', '20220922_hsa_PCRcDNA_Huh7_EBOV_0_6_24h_1', '03'),
+    sample('mmu_dRNA_Sen_Y_PS481_F', 'SQK-RNA002', 'FLO-PRO002', '20221018_mmu_dRNA_Sen_Y_PS481_F'),
+    sample('mmu_dRNA_Sen_Y_PS482_F', 'SQK-RNA002', 'FLO-PRO002', '20221018_mmu_dRNA_Sen_Y_PS482_F'),
+    sample('mmu_dRNA_Sen_Y_PS492_M', 'SQK-RNA002', 'FLO-PRO002', '20221018_mmu_dRNA_Sen_Y_PS492_M'),
+    sample('mmu_dRNA_Sen_Y_PS493_M', 'SQK-RNA002', 'FLO-PRO002', '20221018_mmu_dRNA_Sen_Y_PS493_M'),
+    sample('mmu_dRNA_Sen_O_PS485_F', 'SQK-RNA002', 'FLO-PRO002', '20221024_mmu_dRNA_Sen_O_PS485_F'),
+    sample('mmu_dRNA_Sen_O_PS487_F', 'SQK-RNA002', 'FLO-PRO002', '20221024_mmu_dRNA_Sen_O_PS487_F'),
+    sample('mmu_dRNA_Sen_O_PS495_M', 'SQK-RNA002', 'FLO-PRO002', '20221024_mmu_dRNA_Sen_O_PS495_M'),
+    sample('mmu_dRNA_Sen_O_PS496_M', 'SQK-RNA002', 'FLO-PRO002', '20221024_mmu_dRNA_Sen_O_PS496_M'),
 ]}
 
 
