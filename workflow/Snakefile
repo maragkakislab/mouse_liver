@@ -72,13 +72,13 @@ rule run_all:
         expand(
                 SAMPLES_DIR + "/{s}/align/reads.{target}.sorted.{sufx}",
                 s = samples.keys(),
-                target = ['toGenome', 'toTranscriptome', 'toEbolaGenome'],
+                target = ['toGenome', 'toTranscriptome'],
                 sufx = ['bam', 'bam.bai']),
         # Flagstats
         expand(
             SAMPLES_DIR + "/{s}/align/reads.{target}.sorted.bam.flagstats.txt",
             s = samples.keys(),
-            target = ['toGenome', 'toTranscriptome', 'toEbolaGenome']),
+            target = ['toGenome', 'toTranscriptome']),
         # Counts per transcript
         expand(
                 ANALYSIS_DIR + "/counts/results/{s}/reads.toTranscriptome.counts.txt",
@@ -91,7 +91,7 @@ rule run_all:
         expand(
                 IGV_DIR + "/align/{s}-reads.{target}.sorted.{sufx}",
                 s = samples.keys(),
-                target = ['toGenome', 'toTranscriptome', 'toEbolaGenome'],
+                target = ['toGenome', 'toTranscriptome'],
                 sufx = ['bam', 'bam.bai']),
         # Counts per transcript
         expand(
@@ -128,7 +128,7 @@ rule guppy_basecall:
         8
     resources:
         gpu=2,
-        gpu_model="[gpuv100x|gpua100]",
+        gpu_model="v100x",
         mem_mb=64*1024,
         runtime=10*24*60
     envmodules:
