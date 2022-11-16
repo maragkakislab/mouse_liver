@@ -20,6 +20,11 @@ class sample:
             return True
         return False
 
+    def is_unstranded(self):
+        if self.kit in ['SQK-PCB111-24', 'SQK-PCS111']:
+            return True
+        return False
+
 
 class experiment:
     def __init__(self, name, kit, fc, is_barcoded):
@@ -327,12 +332,12 @@ rule pychopper_merge_trimmed_rescued:
 
 
 # input_for_alignment rules identifies and returns the input fastq file for
-# the alignment step. For barcoded samples the file will pass through
+# the alignment step. For unstranded samples the file will pass through
 # pychopper to orient and remove adapters.
 def input_for_alignment_rules(sample, fastq_prefix):
     s = sample
 
-    if s.is_barcoded():
+    if s.is_unstranded():
         return os.path.join(
             SAMPLES_DIR, s.name, "fastq", fastq_prefix + ".pychopped.fastq.gz")
 
