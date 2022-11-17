@@ -87,9 +87,9 @@ rule run_all:
                 ANALYSIS_DIR + "/counts/results/{s}/reads.toTranscriptome.counts.txt",
                 s = samples.keys()),
         # Nanopolish polya for dRNA-Seq
-        expand(
-                ANALYSIS_DIR + "/polya/results/{s}/polya.tab",
-                s = [s.name for s in samples.values() if s.is_direct_rna()]),
+        # expand(
+        #         ANALYSIS_DIR + "/polya/results/{s}/polya.tab",
+        #         s = [s.name for s in samples.values() if s.is_direct_rna()]),
         # Files for IGV
         expand(
                 IGV_DIR + "/align/{s}-reads.{target}.sorted.{sufx}",
@@ -100,10 +100,24 @@ rule run_all:
         expand(
                 SAMPLES_DIR + "/{s}/qc/reads_fastqc.html",
                 s = samples.keys()),
-        # Cleanup guppy files
+                expand(
+           ANALYSIS_DIR + "/{sample}/align/{prefix}.toGenome.sorted.bed",
+           sample = samples.keys(),
+           prefix="reads"
+
+
+        ),
         expand(
-                EXPERIMENTS_DIR + "/{e}/guppy/clean_guppy_logs_done",
-                e = experiments.keys()),
+           ANALYSIS_DIR + "/{sample}/flair/{prefix}_all_corrected.bed",
+           sample = samples.keys(),
+           prefix="reads"
+
+
+        ),
+        # Cleanup guppy files
+        # expand(
+        #         EXPERIMENTS_DIR + "/{e}/guppy/clean_guppy_logs_done",
+        #         e = experiments.keys()),
 
 
 # guppy_barcode_options returns the additional options that are used in the
@@ -683,7 +697,69 @@ rule nanopolish_filter_passes:
             > {output}
         """
 
+rule bam2bed: #bedtools/2.30.0
+    input: 
+        SAMPLES_DIR + "/{sample}/align/{prefix}.toGenome.sorted.bam"
+    output:
+        ANALYSIS_DIR + "/{sample}/align/{prefix}.toGenome.sorted.bed"
+    resources:
+        mem_mb=1024*30
+    envmodules:
+        "bedtools/2.30.0"
+    shell: 
+        """
+        bedtools bamtobed -bed12 -i {input} > {output}
+        """
 
+rule flair_correct:
+    input:
+        ANALYSIS_DIR + "/{sample}/align/{prefix}.toGenome.sorted.bed"
+    output: #_all_corrected.bed
+        ANALYSIS_DIR + "/{sample}/flair/{prefix}_all_corrected.bed"
+    params:
+        out_prefix = ANALYSIS_DIR + "/{sample}/flair/{prefix}",
+        gtf= DATA_DIR + "/" + ASSEMBLY + "/genes.gtf",
+        genome= "data/hg38/genome/genome.fa",
+    resources:
+        mem_mb = 1024 * 200,
+        runtime = 60 * 12,
+        lscratch=30
+    threads: 16
+    envmodules:
+       "flair/1.6.1"
+    shell:
+        """
+        source myconda
+        conda activate flair
+        flair.py correct --threads {threads} \
+        --query {input} --gtf {params.gtf} --genome {params.genome} \
+        --output {params.out_prefix}
+        """
+        
+rule flair_collapse:
+    input:
+        bed=ANALYSIS_DIR + "/{sample}/flair/{prefix}_all_corrected.bed",
+        reads = SAMPLES_DIR + "/{sample}/fastq/{prefix}.pychopped.fastq.gz"
+        #reads = SAMPLES_DIR + "/{sample}/fastq/reads.fastq.gz"
+    output: 
+        ANALYSIS_DIR + "/{sample}/flair/{prefix}_isoforms.bed"
+    params: 
+        out_prefix = ANALYSIS_DIR + "/{sample}/flair/{prefix}_",
+        genome = DATA_DIR + "/" + ASSEMBLY + "genome/genome.fa",
+        reads = SAMPLES_DIR + "/{sample}/fastq/{prefix}.pychopped.fastq.gz" #using the pychopped stuff
+    resources:
+        mem_mb = 1024 * 200,
+        runtime = 60*12,
+        lscratch=30
+    threads: 20
+    envmodules:
+       "flair/1.6.1"
+    shell:
+        """
+        flair.py collapse --threads {threads} \
+        --query {input.bed} --genome {params.genome} \
+        --reads {input.reads} --output {params.out_prefix}
+        """
 # ################################################################################
 # # fastq_len_distro calculates the length distribution for a fastq file.
 # ################################################################################
