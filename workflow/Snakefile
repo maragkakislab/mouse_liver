@@ -45,9 +45,9 @@ RSYNC_PATH = 'niairplggcgu.irp.nia.nih.gov:/store/seq/ont/experiments/' # Path t
 
 
 samples = {s.name : s for s in [
-    sample('hsa_dRNA_Huh7_mock_1', 'SQK-RNA002', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_mock_1'),
-    sample('hsa_dRNA_Huh7_EBOV_6h_1', 'SQK-RNA002', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_EBOV_6h_1'),
-    sample('hsa_dRNA_Huh7_EBOV_24h_1', 'SQK-RNA002', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_EBOV_24h_1'),
+    #sample('hsa_dRNA_Huh7_mock_1', 'SQK-RNA002', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_mock_1'),
+    #sample('hsa_dRNA_Huh7_EBOV_6h_1', 'SQK-RNA002', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_EBOV_6h_1'),
+    #sample('hsa_dRNA_Huh7_EBOV_24h_1', 'SQK-RNA002', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_EBOV_24h_1'),
     sample('hsa_PCRcDNA_Huh7_EBOV_mock_1', 'SQK-PCB111-24', 'FLO-PRO002', '20220922_hsa_PCRcDNA_Huh7_EBOV_0_6_24h_1', '01'),
     sample('hsa_PCRcDNA_Huh7_EBOV_6h_1', 'SQK-PCB111-24', 'FLO-PRO002', '20220922_hsa_PCRcDNA_Huh7_EBOV_0_6_24h_1', '02'),
     sample('hsa_PCRcDNA_Huh7_EBOV_24h_1', 'SQK-PCB111-24', 'FLO-PRO002', '20220922_hsa_PCRcDNA_Huh7_EBOV_0_6_24h_1', '03'),
@@ -83,9 +83,9 @@ rule run_all:
             s = samples.keys(),
             target = ['toGenome', 'toTranscriptome', 'toEbolaGenome']),
         # Counts per transcript
-        expand(
-                ANALYSIS_DIR + "/counts/results/{s}/reads.toTranscriptome.counts.txt",
-                s = samples.keys()),
+        #expand(
+        #        ANALYSIS_DIR + "/counts/results/{s}/reads.toTranscriptome.counts.txt",
+        #        s = samples.keys()),
         # Nanopolish polya for dRNA-Seq
         # expand(
         #         ANALYSIS_DIR + "/polya/results/{s}/polya.tab",
@@ -114,6 +114,13 @@ rule run_all:
 
 
         ),
+        expand(
+           ANALYSIS_DIR + "/{sample}/flair/{prefix}_isoforms.bed",
+           sample = samples.keys(),
+           prefix="reads"
+
+
+        )
         # Cleanup guppy files
         # expand(
         #         EXPERIMENTS_DIR + "/{e}/guppy/clean_guppy_logs_done",
@@ -725,12 +732,10 @@ rule flair_correct:
         runtime = 60 * 12,
         lscratch=30
     threads: 16
-    envmodules:
+    envmodules: #note that when FLAIR is loaded as a module, it must be run as flair.py, not flair on the cmd line
        "flair/1.6.1"
     shell:
         """
-        source myconda
-        conda activate flair
         flair.py correct --threads {threads} \
         --query {input} --gtf {params.gtf} --genome {params.genome} \
         --output {params.out_prefix}
@@ -752,7 +757,7 @@ rule flair_collapse:
         runtime = 60*12,
         lscratch=30
     threads: 20
-    envmodules:
+    envmodules: 
        "flair/1.6.1"
     shell:
         """
