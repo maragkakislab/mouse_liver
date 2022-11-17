@@ -750,12 +750,12 @@ rule flair_collapse:
         ANALYSIS_DIR + "/{sample}/flair/{prefix}_isoforms.bed"
     params: 
         out_prefix = ANALYSIS_DIR + "/{sample}/flair/{prefix}_",
-        genome = DATA_DIR + "/" + ASSEMBLY + "genome/genome.fa",
+        genome = DATA_DIR + "/" + ASSEMBLY + "/" + "genome/genome.fa",
         reads = SAMPLES_DIR + "/{sample}/fastq/{prefix}.pychopped.fastq.gz" #using the pychopped stuff
     resources:
-        mem_mb = 1024 * 200,
+        mem_mb = 1024 * 150,
         runtime = 60*12,
-        lscratch=30
+        lscratch=60
     threads: 20
     envmodules: 
        "flair/1.6.1"
