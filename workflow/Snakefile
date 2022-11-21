@@ -45,9 +45,9 @@ RSYNC_PATH = 'niairplggcgu.irp.nia.nih.gov:/store/seq/ont/experiments/' # Path t
 
 
 samples = {s.name : s for s in [
-    #sample('hsa_dRNA_Huh7_mock_1', 'SQK-RNA002', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_mock_1'),
-    #sample('hsa_dRNA_Huh7_EBOV_6h_1', 'SQK-RNA002', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_EBOV_6h_1'),
-    #sample('hsa_dRNA_Huh7_EBOV_24h_1', 'SQK-RNA002', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_EBOV_24h_1'),
+    sample('hsa_dRNA_Huh7_mock_1', 'SQK-RNA002', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_mock_1'),
+    sample('hsa_dRNA_Huh7_EBOV_6h_1', 'SQK-RNA002', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_EBOV_6h_1'),
+    sample('hsa_dRNA_Huh7_EBOV_24h_1', 'SQK-RNA002', 'FLO-PRO002', '20220920_hsa_dRNA_Huh7_EBOV_24h_1'),
     sample('hsa_PCRcDNA_Huh7_EBOV_mock_1', 'SQK-PCB111-24', 'FLO-PRO002', '20220922_hsa_PCRcDNA_Huh7_EBOV_0_6_24h_1', '01'),
     sample('hsa_PCRcDNA_Huh7_EBOV_6h_1', 'SQK-PCB111-24', 'FLO-PRO002', '20220922_hsa_PCRcDNA_Huh7_EBOV_0_6_24h_1', '02'),
     sample('hsa_PCRcDNA_Huh7_EBOV_24h_1', 'SQK-PCB111-24', 'FLO-PRO002', '20220922_hsa_PCRcDNA_Huh7_EBOV_0_6_24h_1', '03'),
@@ -83,9 +83,9 @@ rule run_all:
             s = samples.keys(),
             target = ['toGenome', 'toTranscriptome', 'toEbolaGenome']),
         # Counts per transcript
-        #expand(
-        #        ANALYSIS_DIR + "/counts/results/{s}/reads.toTranscriptome.counts.txt",
-        #        s = samples.keys()),
+        expand(
+               ANALYSIS_DIR + "/counts/results/{s}/reads.toTranscriptome.counts.txt",
+               s = samples.keys()),
         # Nanopolish polya for dRNA-Seq
         # expand(
         #         ANALYSIS_DIR + "/polya/results/{s}/polya.tab",
@@ -115,7 +115,7 @@ rule run_all:
 
         ),
         expand(
-           ANALYSIS_DIR + "/{sample}/flair/{prefix}_isoforms.bed",
+           ANALYSIS_DIR + "/{sample}/flair/{prefix}_.isoforms.bed",
            sample = samples.keys(),
            prefix="reads"
 
@@ -740,23 +740,34 @@ rule flair_correct:
         --query {input} --gtf {params.gtf} --genome {params.genome} \
         --output {params.out_prefix}
         """
-        
+
+def input_reads_flair_collapse(sample, fastq_prefix):
+    s = sample
+
+    if s.is_unstranded():
+        return os.path.join(
+            SAMPLES_DIR, s.name, "fastq", fastq_prefix + ".pychopped.fastq.gz")
+
+    return os.path.join(
+        SAMPLES_DIR, s.name, "fastq", fastq_prefix + ".fastq.gz")
+
 rule flair_collapse:
     input:
         bed=ANALYSIS_DIR + "/{sample}/flair/{prefix}_all_corrected.bed",
-        reads = SAMPLES_DIR + "/{sample}/fastq/{prefix}.pychopped.fastq.gz"
-        #reads = SAMPLES_DIR + "/{sample}/fastq/reads.fastq.gz"
+        #reads = SAMPLES_DIR + "/{sample}/fastq/{prefix}.pychopped.fastq.gz",
+        reads = lambda ws: input_reads_flair_collapse(samples[ws.sample], ws.prefix)
+        #reads = SAMPLES_DIR + "/{sample}/fastq/reads.fastq.gz" #lambda ws: input_for_alignment_rules(samples[ws.sample], ws.prefix)
     output: 
-        ANALYSIS_DIR + "/{sample}/flair/{prefix}_isoforms.bed"
+        ANALYSIS_DIR + "/{sample}/flair/{prefix}_.isoforms.bed"
     params: 
         out_prefix = ANALYSIS_DIR + "/{sample}/flair/{prefix}_",
         genome = DATA_DIR + "/" + ASSEMBLY + "/" + "genome/genome.fa",
         reads = SAMPLES_DIR + "/{sample}/fastq/{prefix}.pychopped.fastq.gz" #using the pychopped stuff
     resources:
-        mem_mb = 1024 * 150,
+        mem_mb = 1024 * 120,
         runtime = 60*12,
         lscratch=60
-    threads: 20
+    threads: 40
     envmodules: 
        "flair/1.6.1"
     shell:
@@ -765,6 +776,16 @@ rule flair_collapse:
         --query {input.bed} --genome {params.genome} \
         --reads {input.reads} --output {params.out_prefix}
         """
+# rule flair_quantify:
+#     input:
+#         ANALYSIS_DIR + "/{sample}/flair/{prefix}_isoforms.fa"
+#     threads: 30
+#     resources:
+#         mem_mb = 1024 * 150,
+#         runtime = 60*12,
+#         lscratch=60
+#     envmodules: 
+#        "flair/1.6.1"
 # ################################################################################
 # # fastq_len_distro calculates the length distribution for a fastq file.
 # ################################################################################
