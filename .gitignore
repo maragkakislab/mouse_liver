@@ -6,4 +6,5 @@ experiments
 logs
 igv
 analysis/**/results
-analysis/
+analysis/**/align/
+analysis/**/flair/

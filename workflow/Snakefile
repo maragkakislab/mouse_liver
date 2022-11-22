@@ -87,9 +87,9 @@ rule run_all:
                ANALYSIS_DIR + "/counts/results/{s}/reads.toTranscriptome.counts.txt",
                s = samples.keys()),
         # Nanopolish polya for dRNA-Seq
-        # expand(
-        #         ANALYSIS_DIR + "/polya/results/{s}/polya.tab",
-        #         s = [s.name for s in samples.values() if s.is_direct_rna()]),
+        expand(
+                ANALYSIS_DIR + "/polya/results/{s}/polya.tab",
+                s = [s.name for s in samples.values() if s.is_direct_rna()]),
         # Files for IGV
         expand(
                 IGV_DIR + "/align/{s}-reads.{target}.sorted.{sufx}",
@@ -120,11 +120,11 @@ rule run_all:
            prefix="reads"
 
 
-        )
+        ),
         # Cleanup guppy files
-        # expand(
-        #         EXPERIMENTS_DIR + "/{e}/guppy/clean_guppy_logs_done",
-        #         e = experiments.keys()),
+        expand(
+                EXPERIMENTS_DIR + "/{e}/guppy/clean_guppy_logs_done",
+                e = experiments.keys()),
 
 
 # guppy_barcode_options returns the additional options that are used in the
@@ -720,13 +720,13 @@ rule bam2bed: #bedtools/2.30.0
 
 rule flair_correct:
     input:
-        ANALYSIS_DIR + "/{sample}/align/{prefix}.toGenome.sorted.bed"
+        bed = ANALYSIS_DIR + "/{sample}/align/{prefix}.toGenome.sorted.bed",
+        genome = DATA_DIR + "/" + ASSEMBLY + "/" + "genome/genome.fa",
+        gtf= DATA_DIR + "/" + ASSEMBLY + "/genes.gtf",
     output: #_all_corrected.bed
         ANALYSIS_DIR + "/{sample}/flair/{prefix}_all_corrected.bed"
     params:
         out_prefix = ANALYSIS_DIR + "/{sample}/flair/{prefix}",
-        gtf= DATA_DIR + "/" + ASSEMBLY + "/genes.gtf",
-        genome= "data/hg38/genome/genome.fa",
     resources:
         mem_mb = 1024 * 200,
         runtime = 60 * 12,
@@ -737,7 +737,7 @@ rule flair_correct:
     shell:
         """
         flair.py correct --threads {threads} \
-        --query {input} --gtf {params.gtf} --genome {params.genome} \
+        --query {input.bed} --gtf {input.gtf} --genome {input.genome} \
         --output {params.out_prefix}
         """
 
@@ -754,15 +754,13 @@ def input_reads_flair_collapse(sample, fastq_prefix):
 rule flair_collapse:
     input:
         bed=ANALYSIS_DIR + "/{sample}/flair/{prefix}_all_corrected.bed",
-        #reads = SAMPLES_DIR + "/{sample}/fastq/{prefix}.pychopped.fastq.gz",
-        reads = lambda ws: input_reads_flair_collapse(samples[ws.sample], ws.prefix)
-        #reads = SAMPLES_DIR + "/{sample}/fastq/reads.fastq.gz" #lambda ws: input_for_alignment_rules(samples[ws.sample], ws.prefix)
+        reads = lambda ws: input_reads_flair_collapse(samples[ws.sample], ws.prefix),
+        genome = DATA_DIR + "/" + ASSEMBLY + "/" + "genome/genome.fa",
     output: 
-        ANALYSIS_DIR + "/{sample}/flair/{prefix}_.isoforms.bed"
+        ANALYSIS_DIR + "/{sample}/flair/{prefix}_.isoforms.bed" #naming convention of '_.' is needed for flair, since output of flair command will have suffix '_.isoforms.bed'
     params: 
         out_prefix = ANALYSIS_DIR + "/{sample}/flair/{prefix}_",
-        genome = DATA_DIR + "/" + ASSEMBLY + "/" + "genome/genome.fa",
-        reads = SAMPLES_DIR + "/{sample}/fastq/{prefix}.pychopped.fastq.gz" #using the pychopped stuff
+        reads = SAMPLES_DIR + "/{sample}/fastq/{prefix}.pychopped.fastq.gz"
     resources:
         mem_mb = 1024 * 120,
         runtime = 60*12,
@@ -773,7 +771,7 @@ rule flair_collapse:
     shell:
         """
         flair.py collapse --threads {threads} \
-        --query {input.bed} --genome {params.genome} \
+        --query {input.bed} --genome {input.genome} \
         --reads {input.reads} --output {params.out_prefix}
         """
 # rule flair_quantify:
