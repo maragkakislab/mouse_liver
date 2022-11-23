@@ -51,18 +51,22 @@ DATA_DIR = config['DATA_DIR']
 ANALYSIS_DIR = config['ANALYSIS_DIR']
 IGV_DIR = config['IGV_DIR']
 ASSEMBLY = config['ASSEMBLY']
-FLAIR_DIR = config['FLAIR_DIR']
 RSYNC_PATH = config['RSYNC_PATH']
 SCRIPTS_DIR = config['SCRIPTS_DIR']
+GENOME_FILE = os.path.join(DATA_DIR, ASSEMBLY, 'genome', 'genome.fa')
+GTF_FILE = os.path.join(DATA_DIR, ASSEMBLY, 'genes.gtf')
 
+# FLAIR variables
+FLAIR_DIR = config['FLAIR_DIR']
+FLAIR_RES = os.path.join(FLAIR_DIR, 'results')
 
+# Create a dictionary with samples and experiments.
 samples = {}
 experiments = {}
 for d in config['SAMPLE_DATA']:
     s = sample(*d)
     samples[s.name] = s
-    experiments[s.parent_exp] = experiment(s.parent_exp, s.kit, s.fc, s.is_barcoded()) 
-
+    experiments[s.parent_exp] = experiment(s.parent_exp, s.kit, s.fc, s.is_barcoded())
 
 
 ##### include rules #####
@@ -98,6 +102,9 @@ rule run_all:
         expand(
                 ANALYSIS_DIR + "/polya/results/{s}/polya.tab",
                 s = [s.name for s in samples.values() if s.is_direct_rna()]),
+        # Flair
+        FLAIR_RES + "/all/reads.isoforms.bed",
+        FLAIR_RES + "/all/reads.flair.quantify",
         # Files for IGV
         expand(
                 IGV_DIR + "/align/{s}-reads.{target}.sorted.{sufx}",
@@ -108,27 +115,6 @@ rule run_all:
         expand(
                 SAMPLES_DIR + "/{s}/qc/reads_fastqc.html",
                 s = samples.keys()),
-                expand(
-           ANALYSIS_DIR + "/{sample}/align/{prefix}.toGenome.sorted.bed",
-           sample = samples.keys(),
-           prefix="reads"
-
-
-        ),
-        expand(
-           ANALYSIS_DIR + "/{sample}/flair/{prefix}_all_corrected.bed",
-           sample = samples.keys(),
-           prefix="reads"
-
-
-        ),
-        expand(
-           ANALYSIS_DIR + "/{sample}/flair/{prefix}_.isoforms.bed",
-           sample = samples.keys(),
-           prefix="reads"
-
-
-        ),
         # Cleanup guppy files
         expand(
                 EXP_DIR + "/{e}/guppy/clean_guppy_logs_done",
