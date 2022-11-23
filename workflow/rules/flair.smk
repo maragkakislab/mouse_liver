@@ -24,10 +24,10 @@ rule flair_correct:
         out_prefix = FLAIR_RES + "/{sample}/reads",
     resources:
         mem_mb = 200*1024,
-        runtime = 12*60,
+        runtime = 24*60,
         lscratch = 30
     threads: 16
-    envmodules: # NOTE: when FLAIR module is loaded, it must be run as flair.py, not flair
+    envmodules: # NOTE: when using module, use flair.py instead of flair
        "flair/1.6.1"
     shell:
         """
@@ -40,7 +40,7 @@ rule flair_correct:
         """
 
 
-rule concatenate_bed_files:
+rule flair_concatenate_bed_files:
     input:
         bed = expand(FLAIR_RES + "/{s}/reads_all_corrected.bed", s = samples.keys())
     output:
@@ -58,7 +58,7 @@ rule concatenate_bed_files:
         """
 
 
-def input_reads_flair_collapse(samples):
+def input_reads_for_flair_collapse(samples):
     files = []
     for s in samples.values():
         if s.is_unstranded():
@@ -73,7 +73,7 @@ def input_reads_flair_collapse(samples):
 rule flair_collapse:
     input:
         bed = FLAIR_RES + "/all/reads_all_corrected.bed",
-        reads = lambda ws: input_reads_flair_collapse(samples),
+        reads = lambda ws: input_reads_for_flair_collapse(samples),
         genome = GENOME_FILE,
         gtf = GTF_FILE,
     output:
@@ -98,6 +98,17 @@ rule flair_collapse:
             --reads {input.reads} \
             --output {params.out_prefix}
         """
+
+
+rule flair_make_metadata:
+    output:
+        FLAIR_RES + "/{sgroup}/metadata.tsv"
+    threads: 1
+    run:
+        with open(output[0], 'w') as out:
+            meta_list = FLAIR_METADATA[wildcards.sgroup]
+            for l in meta_list:
+                out.write("\t".join(l) + '\n')
 
 
 rule flair_quantify:
