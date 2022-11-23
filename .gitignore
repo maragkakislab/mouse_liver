@@ -7,3 +7,5 @@ logs
 igv
 analysis/**/results
 trash
+analysis/**/align/
+analysis/**/flair/
