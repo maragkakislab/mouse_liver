@@ -1,0 +1,37 @@
+# Directories used in workflow.
+ANALYSIS_DIR: "analysis"
+DATA_DIR: "data"
+EXP_DIR: "experiments"
+IGV_DIR: "igv"
+SAMPLES_DIR: "samples"
+TRASH_DIR: "trash"
+SCRIPTS_DIR: "workflow/scripts"
+
+# Path to download data from.
+RSYNC_PATH: 'niairplggcgu.irp.nia.nih.gov:/store/seq/ont/experiments/'
+
+# Other variables.
+ASSEMBLY: 'mm10'
+
+# Sample data
+SAMPLE_DATA: [
+    ['mmu_dRNA_Sen_Y_PS481_F', 'SQK-RNA002', 'FLO-PRO002', '20221018_mmu_dRNA_Sen_Y_PS481_F'],
+    ['mmu_dRNA_Sen_Y_PS482_F', 'SQK-RNA002', 'FLO-PRO002', '20221018_mmu_dRNA_Sen_Y_PS482_F'],
+    ['mmu_dRNA_Sen_Y_PS492_M', 'SQK-RNA002', 'FLO-PRO002', '20221018_mmu_dRNA_Sen_Y_PS492_M'],
+    ['mmu_dRNA_Sen_Y_PS493_M', 'SQK-RNA002', 'FLO-PRO002', '20221018_mmu_dRNA_Sen_Y_PS493_M'],
+    ['mmu_dRNA_Sen_O_PS485_F', 'SQK-RNA002', 'FLO-PRO002', '20221024_mmu_dRNA_Sen_O_PS485_F'],
+    ['mmu_dRNA_Sen_O_PS487_F', 'SQK-RNA002', 'FLO-PRO002', '20221024_mmu_dRNA_Sen_O_PS487_F'],
+    ['mmu_dRNA_Sen_O_PS495_M', 'SQK-RNA002', 'FLO-PRO002', '20221024_mmu_dRNA_Sen_O_PS495_M'],
+    ['mmu_dRNA_Sen_O_PS496_M', 'SQK-RNA002', 'FLO-PRO002', '20221024_mmu_dRNA_Sen_O_PS496_M'],
+]
+
+# # Sample groups (unused for now)
+# SAMPLE_GROUPS: {
+#     'group_name': {
+#       'condition': ['sample1', 'sample2'],
+#       'control': ['sample3', 'sample4'],
+#       }
+# }
+
+# FLAIR variables
+FLAIR_DIR: "analysis/flair"

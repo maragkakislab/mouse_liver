@@ -34,30 +34,39 @@ class experiment:
         self.is_barcoded = is_barcoded
 
 
-SAMPLES_DIR = 'samples'
-EXPERIMENTS_DIR = 'experiments'
-DATA_DIR = 'data'
-ANALYSIS_DIR = 'analysis'
-IGV_DIR = "igv"
-ASSEMBLY = 'mm10'
-SCRIPTS_DIR = 'workflow/scripts'
-RSYNC_PATH = 'niairplggcgu.irp.nia.nih.gov:/store/seq/ont/experiments/' # Path to download data from.
+# Load config
+if "--configfile" in sys.argv:
+    i = sys.argv.index("--configfile")
+    config_path = sys.argv[i + 1]
+    configfile: config_path
+else:
+    config_path = "config/config.yml"
+    configfile: config_path
 
 
-samples = {s.name : s for s in [
-    sample('mmu_dRNA_Sen_Y_PS481_F', 'SQK-RNA002', 'FLO-PRO002', '20221018_mmu_dRNA_Sen_Y_PS481_F'),
-    sample('mmu_dRNA_Sen_Y_PS482_F', 'SQK-RNA002', 'FLO-PRO002', '20221018_mmu_dRNA_Sen_Y_PS482_F'),
-    sample('mmu_dRNA_Sen_Y_PS492_M', 'SQK-RNA002', 'FLO-PRO002', '20221018_mmu_dRNA_Sen_Y_PS492_M'),
-    sample('mmu_dRNA_Sen_Y_PS493_M', 'SQK-RNA002', 'FLO-PRO002', '20221018_mmu_dRNA_Sen_Y_PS493_M'),
-    sample('mmu_dRNA_Sen_O_PS485_F', 'SQK-RNA002', 'FLO-PRO002', '20221024_mmu_dRNA_Sen_O_PS485_F'),
-    sample('mmu_dRNA_Sen_O_PS487_F', 'SQK-RNA002', 'FLO-PRO002', '20221024_mmu_dRNA_Sen_O_PS487_F'),
-    sample('mmu_dRNA_Sen_O_PS495_M', 'SQK-RNA002', 'FLO-PRO002', '20221024_mmu_dRNA_Sen_O_PS495_M'),
-    sample('mmu_dRNA_Sen_O_PS496_M', 'SQK-RNA002', 'FLO-PRO002', '20221024_mmu_dRNA_Sen_O_PS496_M'),
-]}
+# Set variables
+SAMPLES_DIR = config['SAMPLES_DIR']
+EXP_DIR = config['EXP_DIR']
+DATA_DIR = config['DATA_DIR']
+ANALYSIS_DIR = config['ANALYSIS_DIR']
+IGV_DIR = config['IGV_DIR']
+ASSEMBLY = config['ASSEMBLY']
+RSYNC_PATH = config['RSYNC_PATH']
+SCRIPTS_DIR = config['SCRIPTS_DIR']
+GENOME_FILE = os.path.join(DATA_DIR, ASSEMBLY, 'genome', 'genome.fa')
+GTF_FILE = os.path.join(DATA_DIR, ASSEMBLY, 'genes.gtf')
 
+# FLAIR variables
+FLAIR_DIR = config['FLAIR_DIR']
+FLAIR_RES = os.path.join(FLAIR_DIR, 'results')
 
-experiments = {
-    s.parent_exp : experiment(s.parent_exp, s.kit, s.fc, s.is_barcoded()) for s in samples.values()}
+# Create a dictionary with samples and experiments.
+samples = {}
+experiments = {}
+for d in config['SAMPLE_DATA']:
+    s = sample(*d)
+    samples[s.name] = s
+    experiments[s.parent_exp] = experiment(s.parent_exp, s.kit, s.fc, s.is_barcoded())
 
 
 ##### include rules #####
@@ -87,12 +96,15 @@ rule run_all:
             target = ['toGenome', 'toTranscriptome']),
         # Counts per transcript
         expand(
-                ANALYSIS_DIR + "/counts/results/{s}/reads.toTranscriptome.counts.txt",
-                s = samples.keys()),
+               ANALYSIS_DIR + "/counts/results/{s}/reads.toTranscriptome.counts.txt",
+               s = samples.keys()),
         # Nanopolish polya for dRNA-Seq
         expand(
                 ANALYSIS_DIR + "/polya/results/{s}/polya.tab",
                 s = [s.name for s in samples.values() if s.is_direct_rna()]),
+        # Flair
+        FLAIR_RES + "/all/reads.isoforms.bed",
+        FLAIR_RES + "/all/reads.flair.quantify",
         # Files for IGV
         expand(
                 IGV_DIR + "/align/{s}-reads.{target}.sorted.{sufx}",
@@ -105,7 +117,7 @@ rule run_all:
                 s = samples.keys()),
         # Cleanup guppy files
         expand(
-                EXPERIMENTS_DIR + "/{e}/guppy/clean_guppy_logs_done",
+                EXP_DIR + "/{e}/guppy/clean_guppy_logs_done",
                 e = experiments.keys()),
 
 
@@ -121,11 +133,11 @@ def guppy_barcode_options(experiment):
 # Rule guppy_basecall runs the guppy basecaller.
 rule guppy_basecall:
     input:
-        EXPERIMENTS_DIR + "/{e}/origin.txt"
+        EXP_DIR + "/{e}/origin.txt"
     output:
-        EXPERIMENTS_DIR + "/{e}/guppy/sequencing_summary.txt"
+        EXP_DIR + "/{e}/guppy/sequencing_summary.txt"
     log:
-        EXPERIMENTS_DIR + "/{e}/log/guppy.log"
+        EXP_DIR + "/{e}/log/guppy.log"
     params:
         fc = lambda wilds: experiments[wilds.e].fc,
         kit = lambda wilds: experiments[wilds.e].kit,
@@ -148,8 +160,8 @@ rule guppy_basecall:
             --records_per_fastq 0 \
             --u_substitution off \
             --trim_strategy none \
-            --input_path {EXPERIMENTS_DIR}/{wildcards.e}/runs/ \
-            --save_path {EXPERIMENTS_DIR}/{wildcards.e}/guppy/ \
+            --input_path {EXP_DIR}/{wildcards.e}/runs/ \
+            --save_path {EXP_DIR}/{wildcards.e}/guppy/ \
             --recursive \
             --gpu_runners_per_device 1 \
             --num_callers {threads} \
@@ -165,14 +177,14 @@ rule guppy_basecall:
 # single file.
 rule merge_fastqs:
     input:
-        EXPERIMENTS_DIR + "/{expt}/guppy/sequencing_summary.txt",
+        EXP_DIR + "/{expt}/guppy/sequencing_summary.txt",
     output:
-        fastq = EXPERIMENTS_DIR + "/{expt}/guppy/reads.fastq.gz",
+        fastq = EXP_DIR + "/{expt}/guppy/reads.fastq.gz",
     shell:
         """
         find \
-            {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/pass/ \
-            {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/fail/ \
+            {EXP_DIR}/{wildcards.expt}/guppy/pass/ \
+            {EXP_DIR}/{wildcards.expt}/guppy/fail/ \
             -name "fastq_runid_*.fastq.gz" \
             -print0 \
         | while read -d $'\\0' FILE; do \
@@ -185,14 +197,14 @@ rule merge_fastqs:
 # into a single file.
 rule merge_fastqs_per_barcode:
     input:
-        EXPERIMENTS_DIR + "/{expt}/guppy/sequencing_summary.txt",
+        EXP_DIR + "/{expt}/guppy/sequencing_summary.txt",
     output:
-        fastq = EXPERIMENTS_DIR + "/{expt}/guppy/barcode/{b}/reads.fastq.gz",
+        fastq = EXP_DIR + "/{expt}/guppy/barcode/{b}/reads.fastq.gz",
     shell:
         """
         find \
-            {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/pass/barcode{wildcards.b}/ \
-            {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/fail/barcode{wildcards.b}/ \
+            {EXP_DIR}/{wildcards.expt}/guppy/pass/barcode{wildcards.b}/ \
+            {EXP_DIR}/{wildcards.expt}/guppy/fail/barcode{wildcards.b}/ \
             -name "fastq_runid_*.fastq.gz" \
             -print0 \
         | while read -d $'\\0' FILE; do \
@@ -204,12 +216,12 @@ rule merge_fastqs_per_barcode:
 # Rule merge_logs merges all logs from the basecalling step.
 rule merge_logs:
     input:
-        summ = EXPERIMENTS_DIR + "/{expt}/guppy/sequencing_summary.txt",
+        summ = EXP_DIR + "/{expt}/guppy/sequencing_summary.txt",
     output:
-        glog = EXPERIMENTS_DIR + "/{expt}/guppy/guppy_basecaller.log.gz"
+        glog = EXP_DIR + "/{expt}/guppy/guppy_basecaller.log.gz"
     shell:
         """
-        find {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/ \
+        find {EXP_DIR}/{wildcards.expt}/guppy/ \
             -name "guppy_basecaller_log-*.log" \
             -print0 \
         | while read -d $'\\0' FILE; do \
@@ -221,12 +233,12 @@ rule merge_logs:
 # Rule clean_guppy_logs cleans all guppy output logs.
 rule clean_guppy_logs:
     input:
-        merged_log = EXPERIMENTS_DIR + "/{expt}/guppy/guppy_basecaller.log.gz",
+        merged_log = EXP_DIR + "/{expt}/guppy/guppy_basecaller.log.gz",
     output:
-        EXPERIMENTS_DIR + "/{expt}/guppy/clean_guppy_logs_done"
+        EXP_DIR + "/{expt}/guppy/clean_guppy_logs_done"
     shell:
         """
-        find {EXPERIMENTS_DIR}/{wildcards.expt}/guppy/ \
+        find {EXP_DIR}/{wildcards.expt}/guppy/ \
             -name "guppy_basecaller_log-*.log" \
             -delete
         touch {output}
@@ -241,10 +253,10 @@ def input_for_get_fastq_from_basecalling(wilds):
 
     if s.is_barcoded():
         return os.path.join(
-            EXPERIMENTS_DIR, s.parent_exp, "guppy", "barcode", s.barcode, "reads.fastq.gz")
+            EXP_DIR, s.parent_exp, "guppy", "barcode", s.barcode, "reads.fastq.gz")
 
     return os.path.join(
-        EXPERIMENTS_DIR, s.parent_exp, "guppy", "reads.fastq.gz")
+        EXP_DIR, s.parent_exp, "guppy", "reads.fastq.gz")
 
 
 # Rule get_fastq_from_basecalling creates a symbolic link to the basecalled
@@ -617,11 +629,11 @@ rule fastqc_fastq:
 # creating problems with nanopolish polya.
 rule nanopolish_repack_vbz_to_gzip:
     input:
-        origin = EXPERIMENTS_DIR + '/{e}/origin.txt',
-        seq_sum = EXPERIMENTS_DIR + '/{e}/guppy/sequencing_summary.txt',
+        origin = EXP_DIR + '/{e}/origin.txt',
+        seq_sum = EXP_DIR + '/{e}/guppy/sequencing_summary.txt',
     output:
-        sentinel = EXPERIMENTS_DIR + '/{e}/repack/repacked.txt',
-        seq_sum = EXPERIMENTS_DIR + '/{e}/repack/sequencing_summary.txt',
+        sentinel = EXP_DIR + '/{e}/repack/repacked.txt',
+        seq_sum = EXP_DIR + '/{e}/repack/sequencing_summary.txt',
     params:
         fast5_dir = lambda wilds, input: os.path.dirname(input.origin),
     threads: 40
@@ -649,8 +661,8 @@ rule nanopolish_repack_vbz_to_gzip:
 # the original fast5s containing each read.
 rule nanopolish_index:
     input:
-        sentinel = lambda ws: EXPERIMENTS_DIR + '/'+ samples[ws.s].parent_exp + '/repack/repacked.txt',
-        seq_sum = lambda ws: EXPERIMENTS_DIR + '/'+ samples[ws.s].parent_exp + '/repack/sequencing_summary.txt',
+        sentinel = lambda ws: EXP_DIR + '/'+ samples[ws.s].parent_exp + '/repack/repacked.txt',
+        seq_sum = lambda ws: EXP_DIR + '/'+ samples[ws.s].parent_exp + '/repack/sequencing_summary.txt',
         fastq = SAMPLES_DIR + "/{s}/fastq/reads.fastq.gz",
     output:
         SAMPLES_DIR + "/{s}/fastq/reads.fastq.gz.index",
@@ -719,7 +731,6 @@ rule nanopolish_filter_passes:
             | grep -P '(qc_tag|PASS)' \
             > {output}
         """
-
 
 # ################################################################################
 # # fastq_len_distro calculates the length distribution for a fastq file.
@@ -970,12 +981,12 @@ rule nanopolish_filter_passes:
 # rule softlink_fast5:
 #     input:
 #         origin=lambda wildcards: glob.glob(
-#                 EXPERIMENTS_DIR + "/"+('[0-9]'*8)+"_{s}/origin.txt".format(s=wildcards.s)),
+#                 EXP_DIR + "/"+('[0-9]'*8)+"_{s}/origin.txt".format(s=wildcards.s)),
 #     output:
 #         SAMPLES_DIR + "/{s}/fast5linked"
 #     params:
 #         fast5dir=lambda wildcards: "../../" + glob.glob(
-#                 EXPERIMENTS_DIR + "/" + ('[0-9]'*8) + "_{s}/".format(s=wildcards.s))[0] + "runs"
+#                 EXP_DIR + "/" + ('[0-9]'*8) + "_{s}/".format(s=wildcards.s))[0] + "runs"
 #     shell:
 #         """
 #         ln -s {params.fast5dir} {SAMPLES_DIR}/{wildcards.s}/fast5
