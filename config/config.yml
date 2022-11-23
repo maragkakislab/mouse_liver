@@ -23,13 +23,14 @@ SAMPLE_DATA: [
     ['hsa_PCRcDNA_Huh7_EBOV_24h_1', 'SQK-PCB111-24', 'FLO-PRO002', '20220922_hsa_PCRcDNA_Huh7_EBOV_0_6_24h_1', '03'],
 ]
 
-# # Sample groups (unused for now)
-# SAMPLE_GROUPS: {
-#     'group_name': {
-#       'condition': ['sample1', 'sample2'],
-#       'control': ['sample3', 'sample4'],
-#       }
-# }
-
 # FLAIR variables
 FLAIR_DIR: "analysis/flair"
+FLAIR_METADATA: {
+    'all': [
+      ['mock1drna', 'mock', 'batch1', 'samples/hsa_dRNA_Huh7_mock_1/fastq/reads.fastq.gz'],
+      ['EBOV6h1drna', 'ebov', 'batch1', 'samples/hsa_dRNA_Huh7_EBOV_6h_1/fastq/reads.fastq.gz'],
+      ['EBOV24h1drna', 'ebov', 'batch1', 'samples/hsa_dRNA_Huh7_EBOV_24h_1/fastq/reads.fastq.gz'],
+      ['EBOVmock1pcr', 'mock', 'batch1', 'samples/hsa_PCRcDNA_Huh7_EBOV_mock_1/fastq/reads.fastq.gz'],
+      ['EBOV6h1pcr', 'ebov', 'batch1', 'samples/hsa_PCRcDNA_Huh7_EBOV_6h_1/fastq/reads.fastq.gz'],
+      ['EBOV24h1pcr', 'ebov', 'batch1', 'samples/hsa_PCRcDNA_Huh7_EBOV_24h_1/fastq/reads.fastq.gz'],
+    ]

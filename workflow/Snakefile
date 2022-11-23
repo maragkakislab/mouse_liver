@@ -59,6 +59,7 @@ GTF_FILE = os.path.join(DATA_DIR, ASSEMBLY, 'genes.gtf')
 # FLAIR variables
 FLAIR_DIR = config['FLAIR_DIR']
 FLAIR_RES = os.path.join(FLAIR_DIR, 'results')
+FLAIR_METADATA = config['FLAIR_METADATA']
 
 # Create a dictionary with samples and experiments.
 samples = {}
@@ -77,7 +78,9 @@ include: "rules/flair.smk"
 # Define rules that require minimal resources and can run on the same node where
 # the actual snakemake is running
 localrules: run_all, merge_fastqs, merge_fastqs_per_barcode, merge_logs,
-            clean_guppy_logs, get_fastq_from_basecalling, symlink_alignments_for_igv
+            clean_guppy_logs, get_fastq_from_basecalling,
+            symlink_alignments_for_igv, flair_make_metadata,
+            flair_concatenate_bed_files
 
 
 # Rule run_all collects all outputs to force execution of the whole pipeline.
