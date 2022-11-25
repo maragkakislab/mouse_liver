@@ -79,7 +79,7 @@ rule flair_collapse:
     output:
         bed = FLAIR_RES + "/all/reads.isoforms.bed",
         fa = FLAIR_RES + "/all/reads.isoforms.fa",
-        #gtf =  FLAIR_RES + "/all/reads.isoforms.gtf",
+        gtf =  FLAIR_RES + "/all/reads.isoforms.gtf",
     params:
         out_prefix = FLAIR_RES + "/all/reads",
     resources:
@@ -143,9 +143,9 @@ rule flair_diffexp:
     input:
         tsv = FLAIR_RES + "/all/reads.flair.quantify"
     output:
-        sentinel = FLAIR_RES + "/all/reads.flair.diffexp"
+        sentinel = FLAIR_RES + "/all/reads.flair.diffexp/formula_matrix.tsv"
     params:
-        out_prefix = FLAIR_RES + "/all/reads.flair.diffexp",
+        outdir = lambda wilds, output: os.path.dirname(output.sentinel),
     resources:
         mem_mb = 120*1024,
         runtime = 24*60,
@@ -159,8 +159,8 @@ rule flair_diffexp:
         flair.py diffexp \
             --counts_matrix {input.tsv} \
             --threads {threads} \
-            --out_dir {params.out_prefix}
-        touch {output.sentinel}
+            --out_dir {params.outdir} \
+            --out_dir_force
         """
 
 
@@ -169,12 +169,12 @@ rule flair_diffsplice:
         tsv = FLAIR_RES + "/all/reads.flair.quantify",
         bed = FLAIR_RES + "/all/reads.isoforms.bed"
     output:
-        FLAIR_RES + "/all/reads.flair.diffsplice.alt3.events.quant.tsv",
-        FLAIR_RES + "/all/reads.flair.diffsplice.alt5.events.quant.tsv",
-        FLAIR_RES + "/all/reads.flair.diffsplice.es.events.quant.tsv",
-        FLAIR_RES + "/all/reads.flair.diffsplice.ir.events.quant.tsv",
+        FLAIR_RES + "/all/reads.flair.diffsplice/diffsplice.alt3.events.quant.tsv",
+        FLAIR_RES + "/all/reads.flair.diffsplice/diffsplice.alt5.events.quant.tsv",
+        FLAIR_RES + "/all/reads.flair.diffsplice/diffsplice.es.events.quant.tsv",
+        FLAIR_RES + "/all/reads.flair.diffsplice/diffsplice.ir.events.quant.tsv",
     params:
-        out_prefix = FLAIR_RES + "/all/reads.flair.diffexp",
+        outdir = lambda wilds, output: os.path.dirname(output[0]),
     resources:
         mem_mb = 120*1024,
         runtime = 12*60,
@@ -184,9 +184,10 @@ rule flair_diffsplice:
        "flair/1.6.1"
     shell:
         """
-        flair.py diffexp \
+        flair.py diffsplice \
             --counts_matrix {input.tsv} \
             --threads {threads} \
             --test \
-            --out_dir {params.out_prefix}
+            --out_dir {params.outdir} \
+            --out_dir_force
         """
