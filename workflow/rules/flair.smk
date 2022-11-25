@@ -25,7 +25,7 @@ rule flair_correct:
     resources:
         mem_mb = 200*1024,
         runtime = 24*60,
-        lscratch = 30
+        disk_mb = 30
     threads: 16
     envmodules: # NOTE: when using module, use flair.py instead of flair
        "flair/1.6.1"
@@ -48,7 +48,7 @@ rule flair_concatenate_bed_files:
     resources:
         mem_mb = 20*1024,
         runtime = 12*60,
-        lscratch = 30
+        disk_mb = 30
     threads: 2
     envmodules:
        "bedops/2.4.41"
@@ -85,7 +85,7 @@ rule flair_collapse:
     resources:
         mem_mb = 256*1024,
         runtime = 2*24*60,
-        lscratch = 120
+        disk_mb = 120
     threads: 40
     envmodules:
        "flair/1.6.1"
@@ -123,7 +123,7 @@ rule flair_quantify:
     resources:
         mem_mb = 120*1024,
         runtime = 12*60,
-        lscratch = 60
+        disk_mb = 60
     threads: 40
     envmodules:
        "R/4.2.2",
@@ -149,7 +149,7 @@ rule flair_diffexp:
     resources:
         mem_mb = 120*1024,
         runtime = 24*60,
-        lscratch = 60
+        disk_mb = 60
     threads: 40
     envmodules:
        "R/4.2.2",
@@ -178,7 +178,7 @@ rule flair_diffsplice:
     resources:
         mem_mb = 120*1024,
         runtime = 12*60,
-        lscratch = 60
+        disk_mb = 60
     threads: 40
     envmodules:
        "flair/1.6.1"
