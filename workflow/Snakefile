@@ -108,6 +108,8 @@ rule run_all:
         # Flair
         FLAIR_RES + "/all/reads.isoforms.bed",
         FLAIR_RES + "/all/reads.flair.quantify",
+        FLAIR_RES + "/all/reads.flair.diffexp/formula_matrix.tsv",
+        FLAIR_RES + "/all/reads.flair.diffsplice/diffsplice.alt3.events.quant.tsv",
         # Files for IGV
         expand(
                 IGV_DIR + "/align/{s}-reads.{target}.sorted.{sufx}",

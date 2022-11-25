@@ -34,3 +34,4 @@ FLAIR_METADATA: {
       ['EBOV6h1pcr', 'ebov', 'batch1', 'samples/hsa_PCRcDNA_Huh7_EBOV_6h_1/fastq/reads.fastq.gz'],
       ['EBOV24h1pcr', 'ebov', 'batch1', 'samples/hsa_PCRcDNA_Huh7_EBOV_24h_1/fastq/reads.fastq.gz'],
     ]
+}
