@@ -83,9 +83,9 @@ rule flair_collapse:
     params:
         out_prefix = FLAIR_RES + "/all/reads",
     resources:
-        mem_mb = 120*1024,
-        runtime = 12*60,
-        lscratch = 60
+        mem_mb = 256*1024,
+        runtime = 2*24*60,
+        lscratch = 120
     threads: 40
     envmodules:
        "flair/1.6.1"
@@ -96,6 +96,7 @@ rule flair_collapse:
             --query {input.bed} \
             --genome {input.genome} \
             --reads {input.reads} \
+            --gtf {input.gtf} \
             --output {params.out_prefix}
         """
 

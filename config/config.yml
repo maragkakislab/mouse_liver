@@ -29,13 +29,13 @@ SAMPLE_DATA: [
 FLAIR_DIR: "analysis/flair"
 FLAIR_METADATA: {
     'all': [
-      ['mmu_dRNA_Sen_Y_PS481_F', 'young', 'batch1', 'samples/mmu_dRNA_Sen_Y_PS481_F/fastq/reads.fastq.gz'],
-      ['mmu_dRNA_Sen_Y_PS482_F', 'young', 'batch1', 'samples/mmu_dRNA_Sen_Y_PS482_F/fastq/reads.fastq.gz'],
-      ['mmu_dRNA_Sen_Y_PS492_M', 'young', 'batch1', 'samples/mmu_dRNA_Sen_Y_PS492_M/fastq/reads.fastq.gz'],
-      ['mmu_dRNA_Sen_Y_PS493_M', 'young', 'batch1', 'samples/mmu_dRNA_Sen_Y_PS493_M/fastq/reads.fastq.gz'],
-      ['mmu_dRNA_Sen_O_PS485_F', 'old', 'batch1', 'samples/mmu_dRNA_Sen_O_PS485_F/fastq/reads.fastq.gz'],
-      ['mmu_dRNA_Sen_O_PS487_F', 'old', 'batch1', 'samples/mmu_dRNA_Sen_O_PS487_F/fastq/reads.fastq.gz'],
-      ['mmu_dRNA_Sen_O_PS495_M', 'old', 'batch1', 'samples/mmu_dRNA_Sen_O_PS495_M/fastq/reads.fastq.gz'],
-      ['mmu_dRNA_Sen_O_PS496_M', 'old', 'batch1', 'samples/mmu_dRNA_Sen_O_PS496_M/fastq/reads.fastq.gz'],
+      ['YF1', 'young', 'batch1', 'samples/mmu_dRNA_Sen_Y_PS481_F/fastq/reads.fastq.gz'],
+      ['YF2', 'young', 'batch1', 'samples/mmu_dRNA_Sen_Y_PS482_F/fastq/reads.fastq.gz'],
+      ['YM1', 'young', 'batch1', 'samples/mmu_dRNA_Sen_Y_PS492_M/fastq/reads.fastq.gz'],
+      ['YM2', 'young', 'batch1', 'samples/mmu_dRNA_Sen_Y_PS493_M/fastq/reads.fastq.gz'],
+      ['OF1', 'old', 'batch1', 'samples/mmu_dRNA_Sen_O_PS485_F/fastq/reads.fastq.gz'],
+      ['OF2', 'old', 'batch1', 'samples/mmu_dRNA_Sen_O_PS487_F/fastq/reads.fastq.gz'],
+      ['OM1', 'old', 'batch1', 'samples/mmu_dRNA_Sen_O_PS495_M/fastq/reads.fastq.gz'],
+      ['OM2', 'old', 'batch1', 'samples/mmu_dRNA_Sen_O_PS496_M/fastq/reads.fastq.gz'],
     ]
 }
