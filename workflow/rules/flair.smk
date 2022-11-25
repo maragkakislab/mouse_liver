@@ -169,12 +169,12 @@ rule flair_diffsplice:
         tsv = FLAIR_RES + "/all/reads.flair.quantify",
         bed = FLAIR_RES + "/all/reads.isoforms.bed"
     output:
-        FLAIR_RES + "/all/reads.flair.diffsplice/diffsplice.alt3.events.quant.tsv",
-        FLAIR_RES + "/all/reads.flair.diffsplice/diffsplice.alt5.events.quant.tsv",
-        FLAIR_RES + "/all/reads.flair.diffsplice/diffsplice.es.events.quant.tsv",
-        FLAIR_RES + "/all/reads.flair.diffsplice/diffsplice.ir.events.quant.tsv",
+        FLAIR_RES + "/all/reads.flair.diffsplice.alt3.events.quant.tsv",
+        FLAIR_RES + "/all/reads.flair.diffsplice.alt5.events.quant.tsv",
+        FLAIR_RES + "/all/reads.flair.diffsplice.es.events.quant.tsv",
+        FLAIR_RES + "/all/reads.flair.diffsplice.ir.events.quant.tsv",
     params:
-        outdir = lambda wilds, output: os.path.dirname(output[0]),
+        out_prefix = FLAIR_RES + "/all/reads.flair.diffsplice",
     resources:
         mem_mb = 120*1024,
         runtime = 12*60,
@@ -185,9 +185,9 @@ rule flair_diffsplice:
     shell:
         """
         flair.py diffsplice \
+            --isoforms {input.bed} \
             --counts_matrix {input.tsv} \
             --threads {threads} \
             --test \
-            --out_dir {params.outdir} \
-            --out_dir_force
+            --output {params.out_prefix}
         """
