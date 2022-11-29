@@ -2,11 +2,11 @@ rule flair_bam2bed:
     input:
         SAMPLES_DIR + "/{sample}/align/reads.toGenome.sorted.bam"
     output:
-        FLAIR_RES + "/{sample}/reads.toGenome.sorted.bed"
+        temp(FLAIR_RES + "/{sample}/reads.toGenome.sorted.bed")
     resources:
         mem_mb = 30*1024
-    envmodules:
-        "flair/1.6.1"
+    conda:
+        "../envs/flair.yml"
     shell:
         """
         bam2Bed12 -i {input} > {output}
@@ -19,7 +19,8 @@ rule flair_correct:
         genome = GENOME_FILE,
         gtf = GTF_FILE,
     output:
-        FLAIR_RES + "/{sample}/reads_all_corrected.bed"
+        FLAIR_RES + "/{sample}/reads_all_corrected.bed",
+        FLAIR_RES + "/{sample}/reads_all_inconsistent.bed"
     params:
         out_prefix = FLAIR_RES + "/{sample}/reads",
     resources:
@@ -27,11 +28,11 @@ rule flair_correct:
         runtime = 24*60,
         disk_mb = 30
     threads: 16
-    envmodules: # NOTE: when using module, use flair.py instead of flair
-       "flair/1.6.1"
+    conda:
+        "../envs/flair.yml"
     shell:
         """
-        flair.py correct \
+        flair correct \
             --threads {threads} \
             --query {input.bed} \
             --gtf {input.gtf} \
@@ -44,7 +45,7 @@ rule flair_concatenate_bed_files:
     input:
         bed = expand(FLAIR_RES + "/{s}/reads_all_corrected.bed", s = samples.keys())
     output:
-        FLAIR_RES + "/all/reads_all_corrected.bed"
+        temp(FLAIR_RES + "/all/reads_all_corrected.bed")
     resources:
         mem_mb = 20*1024,
         runtime = 12*60,
@@ -87,11 +88,11 @@ rule flair_collapse:
         runtime = 2*24*60,
         disk_mb = 120
     threads: 40
-    envmodules:
-       "flair/1.6.1"
+    conda:
+        "../envs/flair.yml"
     shell:
         """
-        flair.py collapse \
+        flair collapse \
             --threads {threads} \
             --query {input.bed} \
             --genome {input.genome} \
@@ -117,7 +118,8 @@ rule flair_quantify:
         fa =  FLAIR_RES + "/all/reads.isoforms.fa",
         meta =  FLAIR_RES + "/all/metadata.tsv"
     output:
-        tsv = FLAIR_RES + "/all/reads.flair.quantify"
+        tsv = FLAIR_RES + "/all/reads.flair.quantify",
+        temp_dir = temp(directory(FLAIR_RES + "/all/reads.flair.quantify.temp"))
     params:
         out_prefix = FLAIR_RES + "/all/reads.flair.quantify",
     resources:
@@ -125,16 +127,15 @@ rule flair_quantify:
         runtime = 12*60,
         disk_mb = 60
     threads: 40
-    envmodules:
-       "R/4.2.2",
-       "flair/1.6.1"
+    conda:
+        "../envs/flair.yml"
     shell:
         """
-        flair.py quantify \
+        flair quantify \
             --reads_manifest {input.meta} \
             --isoforms {input.fa} \
             --threads {threads} \
-            --temp_dir temp/ \
+            --temp_dir {output.tsv} \
             --output {params.out_prefix}
         """
 
@@ -143,20 +144,19 @@ rule flair_diffexp:
     input:
         tsv = FLAIR_RES + "/all/reads.flair.quantify"
     output:
-        sentinel = FLAIR_RES + "/all/reads.flair.diffexp/formula_matrix.tsv"
+        touch(FLAIR_RES + "/all/reads.flair.diffexp/done")
     params:
-        outdir = lambda wilds, output: os.path.dirname(output.sentinel),
+        outdir = lambda wilds, output: os.path.dirname(output[0]),
     resources:
         mem_mb = 120*1024,
         runtime = 24*60,
         disk_mb = 60
     threads: 40
-    envmodules:
-       "R/4.2.2",
-       "flair/1.6.1"
+    conda:
+        "../envs/flair.yml"
     shell:
         """
-        flair.py diffexp \
+        flair diffexp \
             --counts_matrix {input.tsv} \
             --threads {threads} \
             --out_dir {params.outdir} \
@@ -180,11 +180,11 @@ rule flair_diffsplice:
         runtime = 12*60,
         disk_mb = 60
     threads: 40
-    envmodules:
-       "flair/1.6.1"
+    conda:
+        "../envs/flair.yml"
     shell:
         """
-        flair.py diffsplice \
+        flair diffsplice \
             --isoforms {input.bed} \
             --counts_matrix {input.tsv} \
             --threads {threads} \
