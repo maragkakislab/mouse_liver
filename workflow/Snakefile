@@ -73,6 +73,7 @@ for d in config['SAMPLE_DATA']:
 ##### include rules #####
 include: "rules/get_data.smk"
 include: "rules/flair.smk"
+include: "rules/nanopolish.smk"
 
 
 # Define rules that require minimal resources and can run on the same node where
