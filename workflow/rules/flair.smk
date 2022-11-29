@@ -148,10 +148,10 @@ rule flair_diffexp:
     params:
         outdir = lambda wilds, output: os.path.dirname(output[0]),
     resources:
-        mem_mb = 120*1024,
-        runtime = 24*60,
+        mem_mb = 50*1024,
+        runtime = 5*60,
         disk_mb = 60
-    threads: 40
+    threads: 20
     conda:
         "../envs/flair.yml"
     shell:
@@ -176,10 +176,10 @@ rule flair_diffsplice:
     params:
         outdir = lambda wilds, output: os.path.dirname(output[0]),
     resources:
-        mem_mb = 120*1024,
-        runtime = 12*60,
+        mem_mb = 50*1024,
+        runtime = 5*60,
         disk_mb = 60
-    threads: 40
+    threads: 20
     conda:
         "../envs/flair.yml"
     shell:
