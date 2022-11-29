@@ -104,7 +104,7 @@ rule run_all:
                s = samples.keys()),
         # Nanopolish polya for dRNA-Seq
         expand(
-                ANALYSIS_DIR + "/polya/results/{s}/polya.tab",
+                ANALYSIS_DIR + "/polya/results/{s}/polya.filtered.tab",
                 s = [s.name for s in samples.values() if s.is_direct_rna()]),
         # Flair
         FLAIR_RES + "/all/reads.isoforms.bed",

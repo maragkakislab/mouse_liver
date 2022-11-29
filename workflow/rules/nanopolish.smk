@@ -32,8 +32,11 @@ rule nanopolish_polya:
     input:
         fastq = SAMPLES_DIR + "/{s}/fastq/reads.fastq.gz",
         bam = SAMPLES_DIR + "/{s}/align/reads.toTranscriptome.sorted.bam",
-        index = SAMPLES_DIR + "/{s}/fastq/reads.fastq.gz.index.fai",
         genome = DATA_DIR + '/' + ASSEMBLY + "/transcripts.fa",
+        index = SAMPLES_DIR + "/{s}/fastq/reads.fastq.gz.index",
+        index_fai = SAMPLES_DIR + "/{s}/fastq/reads.fastq.gz.index.fai",
+        index_gzi = SAMPLES_DIR + "/{s}/fastq/reads.fastq.gz.index.gzi",
+        index_readdb = SAMPLES_DIR + "/{s}/fastq/reads.fastq.gz.index.readdb",
     output:
         ANALYSIS_DIR + "/polya/results/{s}/polya.tab"
     threads: 20
