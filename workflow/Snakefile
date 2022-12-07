@@ -50,6 +50,7 @@ EXP_DIR = config['EXP_DIR']
 DATA_DIR = config['DATA_DIR']
 ANALYSIS_DIR = config['ANALYSIS_DIR']
 IGV_DIR = config['IGV_DIR']
+SHARE_DIR = config['SHARE_DIR']
 ASSEMBLY = config['ASSEMBLY']
 RSYNC_PATH = config['RSYNC_PATH']
 SCRIPTS_DIR = config['SCRIPTS_DIR']
@@ -81,7 +82,8 @@ include: "rules/nanopolish.smk"
 localrules: run_all, merge_fastqs, merge_fastqs_per_barcode, merge_logs,
             clean_guppy_logs, get_fastq_from_basecalling,
             symlink_alignments_for_igv, flair_make_metadata,
-            flair_concatenate_bed_files
+            flair_concatenate_bed_files, copy_fastqs_to_share,
+            copy_bams_to_share
 
 
 # Rule run_all collects all outputs to force execution of the whole pipeline.
@@ -117,6 +119,15 @@ rule run_all:
                 s = samples.keys(),
                 target = ['toGenome', 'toTranscriptome', 'toUCSCGenome'],
                 sufx = ['bam', 'bam.bai']),
+        # Files for sharing
+        expand(
+                SHARE_DIR + "/{s}-reads.{target}.sorted.{sufx}",
+                s = samples.keys(),
+                target = ['toUCSCGenome'],
+                sufx = ['bam', 'bam.bai']),
+        expand(
+                SHARE_DIR + "/{s}-reads.fastq.gz",
+                s = samples.keys()),
         # Run fastqc for quality control
         expand(
                 SAMPLES_DIR + "/{s}/qc/reads_fastqc.html",
@@ -627,6 +638,34 @@ rule fastqc_fastq:
                 -o {params.outdir} \
                 -t {params.dummy_threads} \
                 {input}
+        """
+
+
+# copy_fastqs_to_share copies fastq files to a directory and names them
+# according to sample to be used for sharing.
+rule copy_bams_to_share:
+    input:
+        SAMPLES_DIR + "/{sample}/align/{filename}",
+    output:
+        "share/{sample}-{filename}",
+    threads: 1
+    shell:
+        """
+        cp -L {input} {output}
+        """
+
+
+# copy_fastqs_to_share copies fastq files to a directory and names them
+# according to sample to be used for sharing.
+rule copy_fastqs_to_share:
+    input:
+        SAMPLES_DIR + "/{sample}/fastq/{filename}.fastq.gz",
+    output:
+        "share/{sample}-{filename}.fastq.gz",
+    threads: 1
+    shell:
+        """
+        cp -L {input} {output}
         """
 
 
