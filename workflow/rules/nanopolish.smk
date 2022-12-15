@@ -2,6 +2,7 @@
 # the original fast5s containing each read.
 rule nanopolish_index:
     input:
+        origin = lambda ws: EXP_DIR + '/'+ samples[ws.s].parent_exp + '/origin.txt',
         seq_sum = lambda ws: EXP_DIR + '/'+ samples[ws.s].parent_exp + '/guppy/sequencing_summary.txt',
         fastq = SAMPLES_DIR + "/{s}/fastq/reads.fastq.gz",
     output:
@@ -10,7 +11,7 @@ rule nanopolish_index:
         temp(SAMPLES_DIR + "/{s}/fastq/reads.fastq.gz.index.gzi"),
         temp(SAMPLES_DIR + "/{s}/fastq/reads.fastq.gz.index.readdb"),
     params:
-        fast5_dir = lambda wilds, input: os.path.dirname(input.seq_sum),
+        fast5_dir = lambda wilds, input: os.path.dirname(input.origin) + "/runs",
     threads: 1
     resources:
         mem_mb=5*1024,
